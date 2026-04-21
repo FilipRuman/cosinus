@@ -1,0 +1,12 @@
+[package]
+name = "cosinus"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+emulator = {path = "emulator"}
+log = "0.4.29"
+colog = "1.4.0"
+
+tokio = { version = "1.47.1", features = ["full"] }
+
