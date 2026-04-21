@@ -27,6 +27,7 @@ User Space
 |-| Disk                  (0xE0000000...)
   | Timer                 (0xE0100000...)
   | Audio                 (0xE0200000...)
+  | Serial                (0xE0300000...)
   | Some other device     (0xE0400000...)
   | ...
 Mode Space -> Memory access throws an exception if the privelage flag in the psr register is false   
@@ -63,6 +64,7 @@ the privelage mode-> look at the instruction set
 
 ### Core Private Registers
 
+- ipr -> interrupt pending register
 - resv_addr -> reserved address for the atomic operations.
 - resv_valid -> is the reservation valid flag for the atomic operations.
 
