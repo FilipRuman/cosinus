@@ -1,0 +1,24 @@
+use crate::emulator::thread::Thread;
+
+impl Thread {
+    pub fn jmp(&mut self, imm: i32) {
+        self.pc += imm;
+    }
+    pub fn call(&mut self, imm: i32) {
+        self.gpr[Thread::RA] = self.pc.wrapping_add(1);
+        self.pc = self.pc.wrapping_add(imm);
+    }
+
+    pub fn ret(&mut self) {
+        self.pc = self.gpr[Thread::RA];
+    }
+
+    pub fn jmpr(&mut self, rs: u8, imm: i16) {
+        let target = self.gpr[rs as usize].wrapping_add(imm as i32);
+        self.pc = target;
+    }
+
+    pub fn apc(&mut self, rd: u8, imm: i16) {
+        self.gpr[rd as usize] = self.pc.wrapping_add(imm as i32);
+    }
+}

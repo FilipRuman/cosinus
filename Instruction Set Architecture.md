@@ -1,5 +1,14 @@
 # Instruction Set Architecture
 
+Legend:
+
+- imm16, imm26 -> 16/26 bit immidiate value
+- rd -> input register specified in the instruction
+- rs1, rs2, rs3 -> input register specified in the instruction\
+  *(rs1) -> memory at address specified by the contents of the rs1 register
+  *(rs2 + imm16) -> memory at address specified by the contents of the rs2
+  register + imm16 immediate value
+
 ## Hardware
 
 - 32 bit
@@ -9,6 +18,8 @@
 - Flat Memory Layout - No MMU
 - LR/SC Atomic operations
 - Context switching support: software managed.
+- Little-endian
+- All instructions as well as PC use byte addresses.
 
 ## Address Space
 
@@ -17,25 +28,25 @@ read/write safety is ensured by checking the psr privilege flag at the
 instruction execution time.
 
 ```s
-User Space
-| RAM          (< 0xD0000000)
-|-| user code
-  | user data
-  | user stacks
-| Framebuffer  (0xD0000000..0xE0000000) 
-| I/O          (0xE0000000..0xF0000000)
-|-| Disk                  (0xE0000000...)
-  | Timer                 (0xE0100000...)
-  | Audio                 (0xE0200000...)
-  | Serial                (0xE0300000...)
-  | Some other device     (0xE0400000...)
-  | ...
-Mode Space -> Memory access throws an exception if the privelage flag in the psr register is false   
-| Mode       (> 0xF0000000)   
-|-| kernel code
-  | kernel data
-  | kernel stacks
-  | interrupt vector table
+|-User Space
+|-|RAM          (< 0xD0000000)
+  |-| user code
+    | user data
+    | user stacks
+  | Framebuffer  (0xD0000000..0xE0000000) 
+  | I/O          (0xE0000000..0xF0000000)
+  |-| Disk                  (0xE0000000...)
+    | Timer                 (0xE0100000...)
+    | Audio                 (0xE0200000...)
+    | Serial                (0xE0300000...)
+    | Some other device     (0xE0400000...)
+    | ...
+|Kernel Space -> Memory access throws an exception if the privelage flag in the psr register is false   
+|-|Kernel       (> 0xF0000000)   
+  |-| kernel code
+    | kernel data
+    | kernel stacks
+    | interrupt vector table
 ```
 
 ## Registers
@@ -55,12 +66,47 @@ Mode Space -> Memory access throws an exception if the privelage flag in the psr
 You interact with those by special instructions. Some of the instructions check
 the privelage mode-> look at the instruction set
 
-- pc -> programable counter
-- psr -> processor Status Register: TODO: add data format
+- pc -> programmable counter - byte address of the current instruction.
+  Automatically grows by 4(4*8=32) after each instruction.
+- psr -> processor status register
 - ivt -> interrupt table base address
 - imr -> interrupt mask register
 - epc -> stores PC when interrupt occurs
 - tid -> thread id register
+- etr -> exception type register
+
+### PSR- Processor Status Register
+
+1. PM — Privilege Mode (1 bit)
+
+- PM = 0 → user mode
+- PM = 1 → kernel mode
+
+Used for:
+
+- Simple kernel memory protection
+- Privileged instruction checks (SYSW, SRET, etc.)
+
+2. IE — Interrupt Enable (2 bit)
+
+- IE = 1 → interrupts enabled
+- IE = 0 → interrupts disabled
+
+Used by CPU:
+
+if (IE == 1) and (IPR & ~IMR != 0) → take interrupt
+
+3. HALT -> Makes thread sleep until the next interrupt (3 bit)
+
+- HALT= 1 → HALT enabled
+- HALT= 0 → HALT disabled
+
+```
+31                                      0
++----+----+--------------------------------+
+| IE | PM |            Un used             |
++----+----+--------------------------------+
+```
 
 ### Core Private Registers
 
@@ -68,7 +114,24 @@ the privelage mode-> look at the instruction set
 - resv_addr -> reserved address for the atomic operations.
 - resv_valid -> is the reservation valid flag for the atomic operations.
 
-## Reservation Invalidation Triggers
+## Atomic Instructions Behavior
+
+You can have only one lock at a time. Creating a new lock before using the
+previous one (SC) is an undefined behavior.
+
+- LR(Load Reserved) rd, rs1: Loads data from *(rs1) and creates
+  reservation(lock) for that address. The reservation may be invalidated by any
+  [of these](#reservation-invalidation-triggers).
+- SC (store-conditional) rd, rs1, rs2: Stores value from rs2 at *(rs1) **ONLY**
+  if there is a reservation for that **EXACT** ADDRESS that **WASN'T YET
+  INVALIDATED**. Calling SC removes reservation for this thread from any
+  address.\
+  The rd register says whether that operation succeeded:
+  - rd == 0: False, that operation did not succeed the *(rs1) has it's original
+    contents.
+  - rd != 0: True, that operation did succeed and the *(rs1) = rs2.
+
+### Reservation Invalidation Triggers
 
 - any write to same address
 - context switch
@@ -84,26 +147,19 @@ Notes:
 - Mode: U = user K = kernel-only
 - Unused bits are irrelevant
 - Decoder only needs to look at opcode to determine format
+- All arithmetic operations will wrapp values-> over/under-flows will not cause
+  exceptions
+- Division by zero returns 0 without throwing any exceptions
 
----
+### Boolean Operations Rules
 
-### 1. Arithmetic & Logical (Register-Register)
+- Bool is declared as: TRUE: value != 0, FALSE: value == 0.
+- Boolean instructions will return 0 for false and 1 for true.
+- Try to use != 0 for bool checking in your code.
 
-| Mode | Opcode |  Bin   | Hex  |    Inputs    |     Meaning      |
-| :--: | :----: | :----: | :--: | :----------: | :--------------: |
-|  U   |  ADDR  | 000000 | 0x00 | rd, rs1, rs2 |  rd = rs1 + rs2  |
-|  U   |  SUBR  | 000001 | 0x01 | rd, rs1, rs2 |  rd = rs1 - rs2  |
-|  U   |  ANDR  | 000010 | 0x02 | rd, rs1, rs2 |  rd = rs1 & rs2  |
-|  U   |  ORR   | 000011 | 0x03 | rd, rs1, rs2 |     rd = rs1     |
-|  U   |  XORR  | 000100 | 0x04 | rd, rs1, rs2 |  rd = rs1 ^ rs2  |
-|  U   |  MULR  | 000101 | 0x05 | rd, rs1, rs2 |  rd = rs1 * rs2  |
-|  U   |  DIVR  | 000110 | 0x06 | rd, rs1, rs2 |  rd = rs1 / rs2  |
-|  U   |  REMR  | 000111 | 0x07 | rd, rs1, rs2 |  rd = rs1 % rs2  |
-|  U   |  SHLR  | 001000 | 0x08 | rd, rs1, rs2 | rd = rs1 << rs2  |
-|  U   |  SHRR  | 001001 | 0x09 | rd, rs1, rs2 | rd = rs1 >> rs2  |
-|  U   |  SARR  | 001010 | 0x0A | rd, rs1, rs2 | arithmetic shift |
+### Example Encoding
 
-```
+```bs
 31          26 25    21 20    16 15    11 10        0
 +-------------+--------+--------+--------+-----------+
 |   opcode    |   rd   |  rs1   |  rs2   |  unused   |
@@ -112,193 +168,137 @@ Notes:
 
 ---
 
-### 2. Arithmetic & Logical (Immediate)
+### Arithmetic & Logical (Register-Register)
 
-| Mode | Opcode |  Bin   | Hex  |     Inputs     |     Meaning      |
-| :--: | :----: | :----: | :--: | :------------: | :--------------: |
-|  U   |  ADD   | 001011 | 0x0B | rd, rs1, imm16 |  rd = rs1 + imm  |
-|  U   |  SUB   | 001100 | 0x0C | rd, rs1, imm16 |  rd = rs1 - imm  |
-|  U   |  AND   | 001101 | 0x0D | rd, rs1, imm16 |  rd = rs1 & imm  |
-|  U   |   OR   | 001110 | 0x0E | rd, rs1, imm16 |     rd = rs1     |
-|  U   |  XOR   | 001111 | 0x0F | rd, rs1, imm16 |  rd = rs1 ^ imm  |
-|  U   |  MUL   | 010000 | 0x10 | rd, rs1, imm16 |  rd = rs1 * imm  |
-|  U   |  DIV   | 010001 | 0x11 | rd, rs1, imm16 |  rd = rs1 / imm  |
-|  U   |  REM   | 010010 | 0x12 | rd, rs1, imm16 |  rd = rs1 % imm  |
-|  U   |  SHLI  | 010011 | 0x13 | rd, rs1, imm16 | rd = rs1 << imm  |
-|  U   |  SHRI  | 010100 | 0x14 | rd, rs1, imm16 | rd = rs1 >> imm  |
-|  U   |  SARI  | 010101 | 0x15 | rd, rs1, imm16 | arithmetic shift |
-
-```
-31          26 25    21 20    16 15                 0
-+-------------+--------+--------+--------------------+
-|   opcode    |   rd   |  rs1   |       imm16        |
-+-------------+--------+--------+--------------------+
-```
-
-### 2. LUI-Type
-
-| Mode | Opcode |  Bin   | Hex  |  Inputs   |    Meaning     |
-| :--: | :----: | :----: | :--: | :-------: | :------------: |
-|  U   |  LUI   | 010110 | 0x16 | rd, imm16 | rd = imm << 16 |
-
-```
-31          26 25    21 20                     5 4   0
-+-------------+--------+------------------------+-----+
-|   opcode    |   rd   |        imm16           |  0  |
-+-------------+--------+------------------------+-----+
-```
+| Mode | Opcode | Hex  | Inputs       | Meaning                |
+| :--: | :----: | :--: | :----------- | :--------------------- |
+|  U   |  ADDR  | 0x00 | rd, rs1, rs2 | rd = rs1 + rs2         |
+|  U   |  SUBR  | 0x01 | rd, rs1, rs2 | rd = rs1 - rs2         |
+|  U   |  ANDR  | 0x02 | rd, rs1, rs2 | rd = rs1 & rs2         |
+|  U   |  ORR   | 0x03 | rd, rs1, rs2 | rd = rs1               |
+|  U   |  XORR  | 0x04 | rd, rs1, rs2 | rd = rs1 ^ rs2         |
+|  U   |  MULR  | 0x05 | rd, rs1, rs2 | rd = rs1 * rs2         |
+|  U   |  DIVR  | 0x06 | rd, rs1, rs2 | rd = rs1 / rs2         |
+|  U   |  REMR  | 0x07 | rd, rs1, rs2 | rd = rs1 % rs2         |
+|  U   |  SHLR  | 0x08 | rd, rs1, rs2 | rd = rs1 << rs2        |
+|  U   |  SHRR  | 0x09 | rd, rs1, rs2 | rd = rs1 >> rs2        |
+|  U   |  SARR  | 0x0A | rd, rs1, rs2 | arithmetic shift right |
 
 ---
 
-### 3. Memory (Base + Immediate)
+### Arithmetic & Logical (Immediate)
 
-| Mode | Opcode |  Bin   | Hex  |     Inputs      |      Meaning       |
-| :--: | :----: | :----: | :--: | :-------------: | :----------------: |
-|  U   |  LOAD  | 010111 | 0x17 | rd, rs1, imm16  | rd = *(rs1 + imm)  |
-|  U   | STORE  | 011000 | 0x18 | rs2, rs1, imm16 | *(rs1 + imm) = rs2 |
-|  U   | LOADB  | 011001 | 0x19 | rd, rs1, imm16  |     load 8-bit     |
-|  U   | STOREB | 011010 | 0x1A | rs2, rs1, imm16 |    store 8-bit     |
-|  U   | LOADH  | 011011 | 0x1B | rd, rs1, imm16  |    load 16-bit     |
-|  U   | STOREH | 011100 | 0x1C | rs2, rs1, imm16 |    store 16-bit    |
-|  U   | LOADPC | 011101 | 0x1D |    rd, imm16    |  rd = *(PC + imm)  |
-
-```
-31          26 25    21 20    16 15                 0
-+-------------+--------+--------+--------------------+
-|   opcode    |  rs2   |  rs1   |       imm16        |
-+-------------+--------+--------+--------------------+
-```
-
-LOAD PC:
-
-```
-31          26 25    21 20                     5 4   0
-+-------------+--------+------------------------+-----+
-|   opcode    |   rd   |        imm16           |  0  |
-+-------------+--------+------------------------+-----+
-```
+| Mode | Opcode | Hex  | Inputs         | Meaning                |
+| :--: | :----: | :--: | :------------- | :--------------------- |
+|  U   |  ADD   | 0x0B | rd, rs1, imm16 | rd = rs1 + imm         |
+|  U   |  SUB   | 0x0C | rd, rs1, imm16 | rd = rs1 - imm         |
+|  U   |  AND   | 0x0D | rd, rs1, imm16 | rd = rs1 & imm         |
+|  U   |   OR   | 0x0E | rd, rs1, imm16 | rd = rs1               |
+|  U   |  XOR   | 0x0F | rd, rs1, imm16 | rd = rs1 ^ imm         |
+|  U   |  MUL   | 0x10 | rd, rs1, imm16 | rd = rs1 * imm         |
+|  U   |  DIV   | 0x11 | rd, rs1, imm16 | rd = rs1 / imm         |
+|  U   |  REM   | 0x12 | rd, rs1, imm16 | rd = rs1 % imm         |
+|  U   |  SHL   | 0x13 | rd, rs1, imm16 | rd = rs1 << imm        |
+|  U   |  SHR   | 0x14 | rd, rs1, imm16 | logical shift right    |
+|  U   |  SAR   | 0x15 | rd, rs1, imm16 | arithmetic shift right |
+|  U   |  NOT   | 0x3A | rd, rs1        | bitwise NOT            |
+|  U   |  LUI   | 0x16 | rd, imm16      | rd = imm16 << 16       |
 
 ---
 
-### 4. Control Flow
+### Memory (Base + Immediate)
 
-| Mode | Opcode |  Bin   | Hex  | Inputs |      Meaning      |
-| :--: | :----: | :----: | :--: | :----: | :---------------: |
-|  U   |  JMP   | 011110 | 0x1E | imm26  |   PC = PC + imm   |
-|  U   |  CALL  | 011111 | 0x1F | imm26  | ra = PC + 1; jump |
-|  U   |  RET   | 100000 | 0x20 |   —    |      PC = ra      |
-
-```
-31          26 25                             0
-+-------------+--------------------------------+
-|   opcode    |            imm26               |
-+-------------+--------------------------------+
-```
+| Mode | Opcode | Hex  | Inputs          | Meaning            |
+| :--: | :----: | :--: | :-------------- | :----------------- |
+|  U   |  LOAD  | 0x17 | rd, rs1, imm16  | rd = *(rs1 + imm)  |
+|  U   | STORE  | 0x18 | rs2, rs1, imm16 | *(rs1 + imm) = rs2 |
+|  U   | LOADB  | 0x19 | rd, rs1, imm16  | load 8-bit         |
+|  U   | STOREB | 0x1A | rs2, rs1, imm16 | store 8-bit        |
+|  U   | LOADH  | 0x1B | rd, rs1, imm16  | load 16-bit        |
+|  U   | STOREH | 0x1C | rs2, rs1, imm16 | store 16-bit       |
+|  U   | LOADPC | 0x1D | rd, imm16       | rd = *(PC + imm)   |
 
 ---
 
-### 5. Branching
+### Control Flow
 
-| Mode | Opcode |  Bin   | Hex  |     Inputs      |  Meaning   |
-| :--: | :----: | :----: | :--: | :-------------: | :--------: |
-|  U   |  BEQ   | 100001 | 0x21 | rs1, rs2, imm16 | if == jump |
-|  U   |  BNE   | 100010 | 0x22 | rs1, rs2, imm16 | if != jump |
-|  U   |  BLT   | 100011 | 0x23 | rs1, rs2, imm16 | if < jump  |
-|  U   |  BGT   | 100100 | 0x24 | rs1, rs2, imm16 | if > jump  |
-|  U   |  BLE   | 100101 | 0x25 | rs1, rs2, imm16 | if <= jump |
-|  U   |  BGE   | 100110 | 0x26 | rs1, rs2, imm16 | if >= jump |
-
-```
-31          26 25    21 20    16 15                 0
-+-------------+--------+--------+--------------------+
-|   opcode    |  rs1   |  rs2   |       imm16        |
-+-------------+--------+--------+--------------------+
-```
+| Mode | Opcode | Hex  | Inputs    | Meaning         |
+| :--: | :----: | :--: | :-------- | :-------------- |
+|  U   |  JMP   | 0x1E | imm26     | PC += imm       |
+|  U   |  CALL  | 0x1F | imm26     | ra = PC+4; jump |
+|  U   |  RET   | 0x20 | —         | PC = ra         |
+|  U   |  JMPR  | 0x21 | rs, imm16 | PC = rs + imm   |
+|  U   |  APC   | 0x22 | rd, imm16 | rd = PC + imm   |
 
 ---
 
-### 6. System Calls
+### Branching
 
-| Mode | Opcode |  Bin   | Hex  | Inputs |       Meaning       |
-| :--: | :----: | :----: | :--: | :----: | :-----------------: |
-|  U   | SCALL  | 100111 | 0x27 |   —    |       syscall       |
-|  K   |  SRET  | 101000 | 0x28 |   —    | return from syscall |
-
-```
-31          26 25                              0
-+-------------+--------------------------------+
-|   opcode    |            unused              |
-+-------------+--------------------------------+
-```
+| Mode | Opcode | Hex  | Inputs          | Meaning              |
+| :--: | :----: | :--: | :-------------- | :------------------- |
+|  U   |  BEQ   | 0x23 | rs1, rs2, imm16 | if rs1 equal rs2     |
+|  U   |  BNE   | 0x24 | rs1, rs2, imm16 | if rs1 not equal rs2 |
+|  U   |  BLT   | 0x25 | rs1, rs2, imm16 | if rs1 less rs2      |
+|  U   |  BGT   | 0x26 | rs1, rs2, imm16 | if rs1 greater rs2   |
+|  U   |  BLE   | 0x27 | rs1, rs2, imm16 | if rs1 <= rs2        |
+|  U   |  BGE   | 0x28 | rs1, rs2, imm16 | if rs1 >= rs2        |
 
 ---
 
-### 7. System Registers
+### System Calls
 
-| Mode | Opcode |  Bin   | Hex  |   Inputs   |        Meaning        |
-| :--: | :----: | :----: | :--: | :--------: | :-------------------: |
-|  U   |  SYSR  | 101001 | 0x29 | rd, imm16  | read system register  |
-|  K   |  SYSW  | 101010 | 0x2A | rs1, imm16 | write system register |
+| Mode | Opcode | Hex  | Inputs | Meaning |
+| :--: | :----: | :--: | :----- | :------ |
+|  U   | SCALL  | 0x29 | —      | syscall |
+|  K   |  SRET  | 0x2A | —      | return  |
 
-```
-31          26 25    21 20    16 15           0
-+-------------+--------+--------+--------------+
-|   opcode    |  reg   |  id    |   unused     |
-+-------------+--------+--------+--------------+
-```
+---
 
-System Register IDs (imm16):
+### System Registers
 
-0. PSR
+| Mode | Opcode | Hex  | Inputs     | Meaning      |
+| :--: | :----: | :--: | :--------- | :----------- |
+|  U   |  SYSR  | 0x2B | rd, imm16  | read sysreg  |
+|  K   |  SYSW  | 0x2C | rs1, imm16 | write sysreg |
+
+Sysregs: 0. PSR
+
 1. IVT
 2. IMR
 3. EPC
 4. TID
+5. ETR
 
 ---
 
-### 8. Atomic (LR/SC)
+### Atomic (LR/SC)
 
-| Mode | Opcode |  Bin   | Hex  |    Inputs    |      Meaning      |
-| :--: | :----: | :----: | :--: | :----------: | :---------------: |
-|  U   |   LR   | 101011 | 0x2B |   rd, rs1    |   load-reserved   |
-|  U   |   SC   | 101100 | 0x2C | rd, rs1, rs2 | conditional store |
-
-SC result:
-
-- rd = 1 success
-- rd = 0 failure
-
-LR:
-
-```
-31          26 25    21 20    16 15        0
-+-------------+--------+--------+-----------+
-|   opcode    |   rd   |  rs1   |  unused   |
-+-------------+--------+--------+-----------+
-```
-
-SC:
-
-```
-31          26 25    21 20    16 15    11 10        0
-+-------------+--------+--------+--------+-----------+
-|   opcode    |   rd   |  rs1   |  rs2   |  unused   |
-+-------------+--------+--------+--------+-----------+
-```
+| Mode | Opcode | Hex  | Inputs       | Meaning           |
+| :--: | :----: | :--: | :----------- | :---------------- |
+|  U   |   LR   | 0x2D | rd, rs1      | load-reserved     |
+|  U   |   SC   | 0x2E | rd, rs1, rs2 | conditional store |
 
 ---
 
-### 9. Misc
+### Misc
 
-| Mode | Opcode |  Bin   | Hex  | Inputs | Meaning |
-| :--: | :----: | :----: | :--: | :----: | :-----: |
-|  U   |  NOP   | 101101 | 0x2D |   —    |  no-op  |
-|  U   |  HALT  | 101110 | 0x2E |   —    |  stop   |
+| Mode | Opcode | Hex  | Inputs | Meaning  |
+| :--: | :----: | :--: | :----- | :------- |
+|  U   |  NOP   | 0x2F | —      | no-op    |
+|  U   |  HALT  | 0x30 | —      | stop CPU |
 
-```
-31          26 25                              0
-+-------------+--------------------------------+
-|   opcode    |            unused              |
-+-------------+--------------------------------+
-```
+---
+
+### Compare
+
+| Mode | Opcode | Hex  | Inputs            | Meaning              |
+| :--: | :----: | :--: | :---------------- | :------------------- |
+|  U   |  LTR   | 0x31 | rd, rs1, rs2      | rd = (rs1 < rs2)     |
+|  U   |  EQR   | 0x32 | rd, rs1, rs2      | rd = (rs1 == rs2)    |
+|  U   |  LTU   | 0x33 | rd, rs1, imm16    | unsigned <           |
+|  U   |  EQU   | 0x34 | rd, rs1, imm16    | unsigned ==          |
+|  U   |  LTS   | 0x35 | rd, rs1, imm16    | signed <             |
+|  U   |  EQS   | 0x36 | rd, rs1, imm16    | signed ==            |
+|  U   |  SEL   | 0x37 | rd, rs1, rs2, rs3 | rd = rs3 ? rs1 : rs2 |
+|  U   |  CTZ   | 0x38 | rd, rs1           | trailing zeros       |
+|  U   |  CLZ   | 0x39 | rd, rs1           | leading zeros        |

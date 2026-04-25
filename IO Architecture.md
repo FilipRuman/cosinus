@@ -21,14 +21,13 @@ Base: 0xE0300000 Interrupt ID: 3 (fixed)
 
 ### STATUS (Bitfield)
 
-bit 0 → IN_READY (1 = input available) bit 1 → ENABLED (1 = device enabled)
+bit 0 → IN_READY (1 = input available)
 
 ---
 
 ### CONTROL (Bitfield)
 
-bit 0 → ENABLE (1 = enable device) bit 1 → ACK (write 1 to acknowledge input /
-clear interrupt)
+bit 0 → ACK (write 1 to acknowledge input / clear interrupt)
 
 ---
 

@@ -1,0 +1,1 @@
+ignore_paths = ["assembler/src/instruction.rs"]
