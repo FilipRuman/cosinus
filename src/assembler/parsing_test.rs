@@ -77,12 +77,12 @@ halt
                 .into(),
                 Macro::Set32 {
                     rd: 25,
-                    imm: Immediate::Direct(0x2222333i32 as u32),
+                    imm: Immediate::Direct(0x2222333i32 as i32),
                 }
                 .into(),
                 Macro::Set32 {
                     rd: 25,
-                    imm: Immediate::Direct(-0x222233i32 as u32),
+                    imm: Immediate::Direct(-0x222233i32 as i32),
                 }
                 .into(),
                 Instruction::BEQ {
@@ -283,7 +283,7 @@ halt
                 .into(),
                 Instruction::RET.into(),
                 Instruction::JMPR {
-                    rs: 1,
+                    rs1: 1,
                     imm: Immediate::Direct(8),
                 }
                 .into(),
@@ -317,7 +317,7 @@ sret
 sysr r1 3
 sysw r2 4
 
-set r5 42
+add r5 r0 42
 set32 r6 0x1122334
 ",
         )?;
@@ -373,8 +373,9 @@ set32 r6 0x1122334
                     imm: Immediate::Direct(4),
                 }
                 .into(),
-                Macro::Set {
+                Instruction::ADD {
                     rd: 5,
+                    rs1: 0,
                     imm: Immediate::Direct(42),
                 }
                 .into(),

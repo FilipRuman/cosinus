@@ -10,6 +10,7 @@ mod test {
     use anyhow::Result;
     use log::info;
 
+    #[test]
     fn test_instruction_conversion_for_asembler() -> Result<()> {
         let r = |x: &u8| (*x as u32) & 0x1F;
         let imm16 = |x: u16| (x as u16 as u32) & 0xFFFF;

@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use log::info;
 use thread::Thread;
 
@@ -18,10 +19,13 @@ pub mod system_level;
 pub mod test;
 pub mod thread;
 
-pub async fn run() {
+pub async fn run() -> Result<()> {
     info!("Hello from emulator!");
-    let thread_0 = Thread::new(0);
+    let (frame_buffer_handle, frame_buffer_rx) = fb::init()?;
+    let thread_0 = Thread::new(0, Some(frame_buffer_handle.clone()));
     tokio::spawn(thread_0.run_loop());
+    fb::run_framebuffer_loop(frame_buffer_rx).await?;
+    Ok(())
 }
 pub unsafe fn write_instructions_to_memory(base_addr: u32, data: Vec<i32>) {
     unsafe {
@@ -32,11 +36,10 @@ pub unsafe fn write_instructions_to_memory(base_addr: u32, data: Vec<i32>) {
 }
 /// Quits on HALT
 pub fn run_test(data: Vec<i32>) -> Thread {
-    info!("RUN TEST!");
     unsafe {
         write_instructions_to_memory(0, data);
     }
-    let mut thread_0 = Thread::new(0);
+    let mut thread_0 = Thread::new(0, None);
     thread_0.run_test_loop();
     thread_0
 }

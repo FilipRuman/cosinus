@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 
 type Label = String;
 
@@ -14,13 +14,16 @@ pub enum Immediate<T> {
 pub enum Macro {
     /// 32-bit immediate load:
     /// LUI rd, upper
-    /// OR  rd, rd, lower
-    Set32 { rd: u8, imm: Immediate<u32> },
-
-    /// 16-bit immediate load:
-    /// LUI rd, upper
-    /// OR  rd, rd, lower
-    Set { rd: u8, imm: Immediate<u16> },
+    /// or  rd, rd, lower
+    Set32 { rd: u8, imm: Immediate<i32> },
+    /// Reads bit at imm(0..31) index from the rs1 register:
+    /// shr rd rs1 imm
+    /// or rd rd 1
+    GetBit {
+        rd: u8,
+        rs1: u8,
+        imm: Immediate<i16>,
+    },
 }
 impl Into<Command> for Macro {
     fn into(self) -> Command {
@@ -33,37 +36,60 @@ impl Into<Command> for Macro {
 //
 //     }
 // }
-impl Into<Vec<Instruction>> for &Macro {
-    fn into(self) -> Vec<Instruction> {
-        match self {
-            Macro::Set { rd, imm } => {
-                vec![Instruction::ADD {
-                    rd: *rd,
-                    rs1: 0,
-                    imm: imm.clone(),
-                }]
-            }
-
+impl Into<Result<Vec<Instruction>>> for &Macro {
+    fn into(self) -> Result<Vec<Instruction>> {
+        Ok(match self {
             Macro::Set32 { rd, imm } => {
+                let rd = *rd;
+                let imm = *match imm {
+                    Immediate::Direct(direct) => direct,
+                    Immediate::Label(_) => todo!(),
+                } as i32;
+
+                let upper = ((imm >> 16) & 0xFFFF) as i16;
+                let lower = (imm & 0xFFFF) as i16;
+
                 vec![
                     Instruction::LUI {
-                        rd: *rd,
-                        imm: match imm {
-                            Immediate::Direct(v) => Immediate::Direct((v >> 16) as u16),
-                            Immediate::Label(l) => Immediate::Label(l.to_string()),
-                        },
+                        rd,
+                        imm: Immediate::Direct(upper), // stored raw, NOT signed semantics
                     },
                     Instruction::OR {
-                        rd: *rd,
-                        rs1: *rd,
-                        imm: match imm {
-                            Immediate::Direct(v) => Immediate::Direct((v & 0xFFFF) as u16),
-                            Immediate::Label(l) => Immediate::Label(l.to_string()),
-                        },
+                        rd,
+                        rs1: rd,
+                        imm: Immediate::Direct(lower), // also raw bits
                     },
                 ]
             }
-        }
+            Macro::GetBit { rd, rs1, imm } => {
+                let rd = *rd;
+                let rs1 = *rs1;
+                let imm = imm.clone();
+                match imm {
+                    Immediate::Direct(imm) => {
+                        if imm < 0 || imm > 31 {
+                            bail!("the imm for getting a bit should be within a 0..=31 range")
+                        }
+                    }
+                    Immediate::Label(_) => bail!(
+                        "Using a label for this is a very weird idea and you probably shouldn't do this! "
+                    ),
+                }
+
+                vec![
+                    Instruction::SHR {
+                        rd: rd,
+                        rs1: rs1,
+                        imm: imm,
+                    },
+                    Instruction::OR {
+                        rd: rd,
+                        rs1: rd,
+                        imm: Immediate::Direct(1),
+                    },
+                ]
+            }
+        })
     }
 }
 
@@ -160,83 +186,83 @@ pub enum Instruction {
     ADD {
         rd: u8,
         rs1: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// rd = rs1 - imm
     SUB {
         rd: u8,
         rs1: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// rd = rs1 & imm
     AND {
         rd: u8,
         rs1: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// rd = rs1 | imm
     OR {
         rd: u8,
         rs1: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// rd = rs1 ^ imm
     XOR {
         rd: u8,
         rs1: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// rd = rs1 * imm
     MUL {
         rd: u8,
         rs1: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// rd = rs1 / imm
     DIV {
         rd: u8,
         rs1: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// rd = rs1 % imm
     REM {
         rd: u8,
         rs1: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// rd = rs1 << imm
     SHL {
         rd: u8,
         rs1: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// rd = rs1 >> imm (logical)
     SHR {
         rd: u8,
         rs1: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// rd = rs1 >> imm (arithmetic)
     SAR {
         rd: u8,
         rs1: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// Load upper immediate
     LUI {
         rd: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     // ===== Memory ============
@@ -244,68 +270,68 @@ pub enum Instruction {
     LOAD {
         rd: u8,
         rs1: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// *(rs1 + imm) = rs2
     STORE {
         rs1: u8,
         rs2: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// rd = *(rs1 + imm) (8-bit)
     LOADB {
         rd: u8,
         rs1: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// *(rs1 + imm) = rs2 (8-bit)
     STOREB {
         rs2: u8,
         rs1: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// rd = *(rs1 + imm) (16-bit)
     LOADH {
         rd: u8,
         rs1: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// *(rs1 + imm) = rs2 (16-bit)
     STOREH {
         rs2: u8,
         rs1: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// rd = *(PC + imm)
     LOADPC {
         rd: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     // ===== Control ===========
     /// PC = PC + imm
     JMP {
-        imm: Immediate<u32>,
+        imm: Immediate<i32>,
     },
 
     JMPR {
-        rs: u8,
-        imm: Immediate<u16>,
+        rs1: u8,
+        imm: Immediate<i16>,
     },
     APC {
         rd: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// ra = PC + 1; PC = PC + imm
     CALL {
-        imm: Immediate<u32>,
+        imm: Immediate<i32>,
     },
 
     /// return
@@ -316,42 +342,42 @@ pub enum Instruction {
     BEQ {
         rs1: u8,
         rs2: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// if rs1 != rs2
     BNE {
         rs1: u8,
         rs2: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// if rs1 < rs2
     BLT {
         rs1: u8,
         rs2: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// if rs1 > rs2
     BGT {
         rs1: u8,
         rs2: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// if rs1 <= rs2
     BLE {
         rs1: u8,
         rs2: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     /// if rs1 >= rs2
     BGE {
         rs1: u8,
         rs2: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     // ===== System ============
@@ -369,7 +395,7 @@ pub enum Instruction {
     /// 4. TID
     SYSR {
         rd: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
     /// Read system registers(User permissions)
     /// System Register IDs (imm16):
@@ -380,7 +406,7 @@ pub enum Instruction {
     /// 4. TID
     SYSW {
         rs1: u8,
-        imm: Immediate<u16>,
+        imm: Immediate<i16>,
     },
 
     // ===== Atomics ==========
@@ -402,38 +428,26 @@ pub enum Instruction {
 
     LTR {
         rd: u8,
+        rs1: u8,
         rs2: u8,
-        imm: Immediate<u16>,
     },
 
     EQR {
         rd: u8,
+        rs1: u8,
         rs2: u8,
-        imm: Immediate<u16>,
     },
 
-    LTU {
+    LT {
         rd: u8,
-        rs2: u8,
-        imm: Immediate<u16>,
+        rs1: u8,
+        imm: Immediate<i16>,
     },
 
-    EQU {
+    EQ {
         rd: u8,
-        rs2: u8,
-        imm: Immediate<u16>,
-    },
-
-    LTS {
-        rd: u8,
-        rs2: u8,
-        imm: Immediate<u16>,
-    },
-
-    EQS {
-        rd: u8,
-        rs2: u8,
-        imm: Immediate<u16>,
+        rs1: u8,
+        imm: Immediate<i16>,
     },
 
     SEL {
@@ -463,51 +477,51 @@ impl Into<Command> for Instruction {
         Command::Instr(self)
     }
 }
-fn resolve_u16(imm: &Immediate<u16>, labels: &HashMap<String, usize>, pc: usize) -> u16 {
+fn resolve_i16(imm: &Immediate<i16>, labels: &HashMap<String, usize>, pc: usize) -> i16 {
     match imm {
         Immediate::Direct(v) => *v,
         Immediate::Label(name) => {
             let target = labels[name];
-            (target as isize - pc as isize - 1) as u16
+            (target as isize - pc as isize - 1) as i16
         }
     }
 }
 
-fn resolve_u32(imm: &Immediate<u32>, labels: &HashMap<String, usize>, pc: usize) -> u32 {
+fn resolve_i32(imm: &Immediate<i32>, labels: &HashMap<String, usize>, pc: usize) -> i32 {
     match imm {
         Immediate::Direct(v) => *v,
         Immediate::Label(name) => {
             let target = labels[name];
-            (target as isize - pc as isize - 1) as u32
+            (target as isize - pc as isize - 1) as i32
         }
     }
 }
 impl Instruction {
-    pub fn encode(&self, labels: &HashMap<&String, usize>, pc: usize) -> Result<u32> {
-        let r = |x: &u8| (*x as u32) & 0x1F;
-        let imm16 = |x: u16| (x as u16 as u32) & 0xFFFF;
-        let imm26 = |x: u32| (x as u32) & 0x03FF_FFFF;
+    pub fn encode(&self, labels: &HashMap<&String, usize>, pc: usize) -> Result<i32> {
+        let r = |x: &u8| (*x as i32) & 0x1F;
+        let imm16 = |x: i16| (x as i16 as i32) & 0xFFFF;
+        let imm26 = |x: i32| (x as i32) & 0x03FF_FFFF;
 
-        let u16 = |imm: &Immediate<u16>| -> Result<u16> {
+        let i16 = |imm: &Immediate<i16>| -> Result<i16> {
             match imm {
                 Immediate::Direct(v) => Ok(*v),
                 Immediate::Label(name) => {
                     let target = *labels.get(name).with_context(|| {
                         format!("There wasn't a label with name: '{name}' in the labels hashMap")
                     })?;
-                    Ok((target as isize - pc as isize - 1) as u16)
+                    Ok(((target as isize - pc as isize) as i16) * 4)
                 }
             }
         };
 
-        let u32 = |imm: &Immediate<u32>| -> Result<u32> {
+        let i32 = |imm: &Immediate<i32>| -> Result<i32> {
             match imm {
                 Immediate::Direct(v) => Ok(*v),
                 Immediate::Label(name) => {
                     let target = *labels.get(name).with_context(|| {
                         format!("There wasn't a label with name: '{name}' in the labels hashMap")
                     })?;
-                    Ok((target as isize - pc as isize) as u32)
+                    Ok((target as isize - pc as isize) as i32 * 4)
                 }
             }
         };
@@ -560,124 +574,126 @@ impl Instruction {
 
             // ===== I-type =====
             Instruction::ADD { rd, rs1, imm } => {
-                (0x0B << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(u16(imm)?)
+                (0x0B << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::SUB { rd, rs1, imm } => {
-                (0x0C << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(u16(imm)?)
+                (0x0C << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::AND { rd, rs1, imm } => {
-                (0x0D << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(u16(imm)?)
+                (0x0D << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::OR { rd, rs1, imm } => {
-                (0x0E << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(u16(imm)?)
+                (0x0E << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::XOR { rd, rs1, imm } => {
-                (0x0F << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(u16(imm)?)
+                (0x0F << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::MUL { rd, rs1, imm } => {
-                (0x10 << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(u16(imm)?)
+                (0x10 << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::DIV { rd, rs1, imm } => {
-                (0x11 << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(u16(imm)?)
+                (0x11 << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::REM { rd, rs1, imm } => {
-                (0x12 << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(u16(imm)?)
+                (0x12 << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::SHL { rd, rs1, imm } => {
-                (0x13 << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(u16(imm)?)
+                (0x13 << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::SHR { rd, rs1, imm } => {
-                (0x14 << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(u16(imm)?)
+                (0x14 << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::SAR { rd, rs1, imm } => {
-                (0x15 << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(u16(imm)?)
+                (0x15 << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(i16(imm)?)
             }
 
-            Instruction::LUI { rd, imm } => (0x16 << 26) | (r(rd) << 21) | (imm16(u16(imm)?) << 5),
+            Instruction::LUI { rd, imm } => (0x16 << 26) | (r(rd) << 21) | (imm16(i16(imm)?) << 5),
 
             // ===== Memory =====
             Instruction::LOAD { rd, rs1, imm } => {
-                (0x17 << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(u16(imm)?)
+                (0x17 << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::STORE { rs2, rs1, imm } => {
-                (0x18 << 26) | (r(rs2) << 21) | (r(rs1) << 16) | imm16(u16(imm)?)
+                (0x18 << 26) | (r(rs1) << 21) | (r(rs2) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::LOADB { rd, rs1, imm } => {
-                (0x19 << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(u16(imm)?)
+                (0x19 << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::STOREB { rs2, rs1, imm } => {
-                (0x1A << 26) | (r(rs2) << 21) | (r(rs1) << 16) | imm16(u16(imm)?)
+                (0x1A << 26) | (r(rs1) << 21) | (r(rs2) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::LOADH { rd, rs1, imm } => {
-                (0x1B << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(u16(imm)?)
+                (0x1B << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::STOREH { rs2, rs1, imm } => {
-                (0x1C << 26) | (r(rs2) << 21) | (r(rs1) << 16) | imm16(u16(imm)?)
+                (0x1C << 26) | (r(rs1) << 21) | (r(rs2) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::LOADPC { rd, imm } => {
-                (0x1D << 26) | (r(rd) << 21) | (imm16(u16(imm)?) << 5)
+                (0x1D << 26) | (r(rd) << 21) | (imm16(i16(imm)?) << 5)
             }
 
             // ===== Control =====
-            Instruction::JMP { imm } => (0x1E << 26) | imm26(u32(imm)?),
+            Instruction::JMP { imm } => (0x1E << 26) | imm26(i32(imm)?),
 
-            Instruction::CALL { imm } => (0x1F << 26) | imm26(u32(imm)?),
+            Instruction::CALL { imm } => (0x1F << 26) | imm26(i32(imm)?),
 
             Instruction::RET => 0x20 << 26,
 
-            Instruction::JMPR { rs, imm } => (0x21 << 26) | (r(rs) << 21) | (imm16(u16(imm)?) << 5),
+            Instruction::JMPR { rs1: rs, imm } => {
+                (0x21 << 26) | (r(rs) << 21) | (imm16(i16(imm)?) << 5)
+            }
 
-            Instruction::APC { rd, imm } => (0x22 << 26) | (r(rd) << 21) | (imm16(u16(imm)?) << 5),
+            Instruction::APC { rd, imm } => (0x22 << 26) | (r(rd) << 21) | (imm16(i16(imm)?) << 5),
 
             // ===== Branch =====
             Instruction::BEQ { rs1, rs2, imm } => {
-                (0x23 << 26) | (r(rs1) << 21) | (r(rs2) << 16) | imm16(u16(imm)?)
+                (0x23 << 26) | (r(rs1) << 21) | (r(rs2) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::BNE { rs1, rs2, imm } => {
-                (0x24 << 26) | (r(rs1) << 21) | (r(rs2) << 16) | imm16(u16(imm)?)
+                (0x24 << 26) | (r(rs1) << 21) | (r(rs2) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::BLT { rs1, rs2, imm } => {
-                (0x25 << 26) | (r(rs1) << 21) | (r(rs2) << 16) | imm16(u16(imm)?)
+                (0x25 << 26) | (r(rs1) << 21) | (r(rs2) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::BGT { rs1, rs2, imm } => {
-                (0x26 << 26) | (r(rs1) << 21) | (r(rs2) << 16) | imm16(u16(imm)?)
+                (0x26 << 26) | (r(rs1) << 21) | (r(rs2) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::BLE { rs1, rs2, imm } => {
-                (0x27 << 26) | (r(rs1) << 21) | (r(rs2) << 16) | imm16(u16(imm)?)
+                (0x27 << 26) | (r(rs1) << 21) | (r(rs2) << 16) | imm16(i16(imm)?)
             }
 
             Instruction::BGE { rs1, rs2, imm } => {
-                (0x28 << 26) | (r(rs1) << 21) | (r(rs2) << 16) | imm16(u16(imm)?)
+                (0x28 << 26) | (r(rs1) << 21) | (r(rs2) << 16) | imm16(i16(imm)?)
             }
 
             // ===== System =====
             Instruction::SCALL => 0x29 << 26,
             Instruction::SRET => 0x2A << 26,
 
-            Instruction::SYSR { rd, imm } => (0x2B << 26) | (r(rd) << 21) | (imm16(u16(imm)?) << 5),
+            Instruction::SYSR { rd, imm } => (0x2B << 26) | (r(rd) << 21) | (imm16(i16(imm)?) << 5),
 
             Instruction::SYSW { rs1, imm } => {
-                (0x2C << 26) | (r(rs1) << 21) | (imm16(u16(imm)?) << 5)
+                (0x2C << 26) | (r(rs1) << 21) | (imm16(i16(imm)?) << 5)
             }
 
             // ===== Atomics =====
@@ -692,28 +708,20 @@ impl Instruction {
             Instruction::HALT => 0x30 << 26,
 
             // ===== Comparison =====
-            Instruction::LTR { rd, rs2, imm } => {
-                (0x31 << 26) | (r(rd) << 21) | (r(rs2) << 16) | imm16(u16(imm)?)
+            Instruction::LTR { rd, rs1, rs2 } => {
+                (0x31 << 26) | (r(rd) << 21) | (r(rs1) << 16) | (r(rs2) << 11)
             }
 
-            Instruction::EQR { rd, rs2, imm } => {
-                (0x32 << 26) | (r(rd) << 21) | (r(rs2) << 16) | imm16(u16(imm)?)
+            Instruction::EQR { rd, rs1, rs2 } => {
+                (0x32 << 26) | (r(rd) << 21) | (r(rs1) << 16) | (r(rs2) << 11)
             }
 
-            Instruction::LTU { rd, rs2, imm } => {
-                (0x33 << 26) | (r(rd) << 21) | (r(rs2) << 16) | imm16(u16(imm)?)
+            Instruction::LT { rd, rs1, imm } => {
+                (0x33 << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(i16(imm)?)
             }
 
-            Instruction::EQU { rd, rs2, imm } => {
-                (0x34 << 26) | (r(rd) << 21) | (r(rs2) << 16) | imm16(u16(imm)?)
-            }
-
-            Instruction::LTS { rd, rs2, imm } => {
-                (0x35 << 26) | (r(rd) << 21) | (r(rs2) << 16) | imm16(u16(imm)?)
-            }
-
-            Instruction::EQS { rd, rs2, imm } => {
-                (0x36 << 26) | (r(rd) << 21) | (r(rs2) << 16) | imm16(u16(imm)?)
+            Instruction::EQ { rd, rs1, imm } => {
+                (0x34 << 26) | (r(rd) << 21) | (r(rs1) << 16) | imm16(i16(imm)?)
             }
 
             // ===== Ternary (3-source) =====

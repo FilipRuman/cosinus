@@ -2,7 +2,7 @@ use std::sync::atomic::AtomicBool;
 
 use log::LevelFilter;
 
-const LEVEL_FILTER: LevelFilter = LevelFilter::Debug;
+const LEVEL_FILTER: LevelFilter = LevelFilter::Trace;
 static LOG_INITALIZED: AtomicBool = AtomicBool::new(false);
 pub fn init_log() {
     if !LOG_INITALIZED.load(std::sync::atomic::Ordering::Relaxed) {

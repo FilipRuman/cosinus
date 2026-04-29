@@ -28,7 +28,7 @@ pub fn parse_program(input: &str) -> Result<Vec<Command>> {
             continue;
         }
 
-        out.push(parse_op(line).with_context(|| format!("line {}", lineno))?);
+        out.push(parse_op(line).with_context(|| format!("line {}, contents:'{raw}'", lineno))?);
     }
 
     Ok(out)
@@ -62,18 +62,13 @@ fn parse_int(s: &str) -> Result<i64> {
     }
 }
 
-/* imm16: signed-first, fallback unsigned */
-fn parse_imm16(s: Option<&&str>) -> Result<Immediate<u16>> {
+fn parse_imm16(s: Option<&&str>) -> Result<Immediate<i16>> {
     let s = *s.context("missing imm16")?;
 
     match parse_int(s) {
         Ok(v) => {
             if v >= i16::MIN as i64 && v <= i16::MAX as i64 {
-                return Ok(Immediate::Direct(v as i16 as u16));
-            }
-
-            if v >= 0 && v <= u16::MAX as i64 {
-                return Ok(Immediate::Direct(v as u16));
+                return Ok(Immediate::Direct(v as i16 as i16));
             }
 
             anyhow::bail!("imm16 out of range: {}", v);
@@ -82,8 +77,19 @@ fn parse_imm16(s: Option<&&str>) -> Result<Immediate<u16>> {
     }
 }
 
-/* imm26: signed-first, fallback unsigned */
-fn parse_imm26(s: Option<&&str>) -> Result<Immediate<u32>> {
+fn parse_imm32(s: Option<&&str>) -> Result<Immediate<i32>> {
+    let s = *s.context("missing imm32")?;
+
+    match parse_int(s) {
+        Ok(v) => {
+            let v = v as u32 as i32; // interpret as 32-bit signed two's complement
+
+            return Ok(Immediate::Direct(v));
+        }
+        Err(_) => Ok(Immediate::Label(s.to_string())),
+    }
+}
+fn parse_imm26(s: Option<&&str>) -> Result<Immediate<i32>> {
     let s = *s.context("missing imm26")?;
 
     match parse_int(s) {
@@ -92,11 +98,7 @@ fn parse_imm26(s: Option<&&str>) -> Result<Immediate<u32>> {
             const MAX: i64 = (1 << 25) - 1;
 
             if v >= MIN && v <= MAX {
-                return Ok(Immediate::Direct(v as i32 as u32));
-            }
-
-            if v >= 0 && v <= ((1 << 26) - 1) {
-                return Ok(Immediate::Direct(v as u32));
+                return Ok(Immediate::Direct(v as i32 as i32));
             }
 
             anyhow::bail!("imm26 out of range: {}", v);
@@ -107,7 +109,7 @@ fn parse_imm26(s: Option<&&str>) -> Result<Immediate<u32>> {
 
 fn rrr<F>(args: &[&str], f: F) -> Result<Command>
 where
-    F: Fn(u8, u8, u8) -> Instruction,
+    F: Fn(u8, u8, u8) -> Command,
 {
     if args.len() != 3 {
         anyhow::bail!("expected: rd rs1 rs2");
@@ -117,13 +119,12 @@ where
         parse_reg(args[0])?,
         parse_reg(args[1])?,
         parse_reg(args[2])?,
-    )
-    .into())
+    ))
 }
 
 fn rri<F>(args: &[&str], f: F) -> Result<Command>
 where
-    F: Fn(u8, u8, Immediate<u16>) -> Instruction,
+    F: Fn(u8, u8, Immediate<i16>) -> Command,
 {
     if args.len() != 3 {
         anyhow::bail!("expected: rd rs1 imm");
@@ -133,75 +134,18 @@ where
         parse_reg(args[0])?,
         parse_reg(args[1])?,
         parse_imm16(args.get(2))?,
-    )
-    .into())
+    ))
 }
 
 fn ri<F>(args: &[&str], f: F) -> Result<Command>
 where
-    F: Fn(u8, Immediate<u16>) -> Instruction,
+    F: Fn(u8, Immediate<i16>) -> Command,
 {
     if args.len() != 2 {
         anyhow::bail!("expected: rd imm");
     }
 
-    Ok(f(parse_reg(args[0])?, parse_imm16(args.get(1))?).into())
-}
-
-fn branch<F>(args: &[&str], f: F) -> Result<Command>
-where
-    F: Fn(u8, u8, Immediate<u16>) -> Instruction,
-{
-    if args.len() != 3 {
-        anyhow::bail!("expected: rs1 rs2 imm");
-    }
-
-    Ok(f(
-        parse_reg(args[0])?,
-        parse_reg(args[1])?,
-        parse_imm16(args.get(2))?,
-    )
-    .into())
-}
-
-fn cmp<F>(args: &[&str], f: F) -> Result<Command>
-where
-    F: Fn(u8, u8, Immediate<u16>) -> Instruction,
-{
-    if args.len() != 3 {
-        anyhow::bail!("expected: rd rs2 imm");
-    }
-
-    Ok(f(
-        parse_reg(args[0])?,
-        parse_reg(args[1])?,
-        parse_imm16(args.get(2))?,
-    )
-    .into())
-}
-
-fn parse_store(args: &[&str]) -> Result<(u8, u8, Immediate<u16>)> {
-    if args.len() != 3 {
-        anyhow::bail!("expected: rs1 rs2 imm");
-    }
-
-    Ok((
-        parse_reg(args[0])?,
-        parse_reg(args[1])?,
-        parse_imm16(args.get(2))?,
-    ))
-}
-
-fn parse_storeb(args: &[&str]) -> Result<(u8, u8, Immediate<u16>)> {
-    if args.len() != 3 {
-        anyhow::bail!("expected: rs1 rs2 imm");
-    }
-
-    Ok((
-        parse_reg(args[1])?, // rs2
-        parse_reg(args[0])?, // rs1 (swapped per ISA)
-        parse_imm16(args.get(2))?,
-    ))
+    Ok(f(parse_reg(args[0])?, parse_imm16(args.get(1))?))
 }
 
 fn parse_op(line: &str) -> Result<Command> {
@@ -209,162 +153,169 @@ fn parse_op(line: &str) -> Result<Command> {
     let op = parts.next().context("empty line")?.to_uppercase();
     let args: Vec<&str> = parts.collect();
 
-    Ok(match op.as_str() {
+    match op.as_str() {
         // macros
-        "SET" => {
-            let (rd, imm) = parse_rd_imm16(&args)?;
-            Macro::Set { rd, imm }.into()
-        }
         "SET32" => {
             let (rd, imm) = parse_rd_imm32(&args)?;
-            Macro::Set32 { rd, imm }.into()
+            Ok(Macro::Set32 { rd, imm }.into())
         }
+        "GETBIT" => rri(&args, |rd, rs1, imm| Macro::GetBit { rd, rs1, imm }.into()),
 
         // zero
-        "RET" => Instruction::RET.into(),
-        "NOP" => Instruction::NOP.into(),
-        "HALT" => Instruction::HALT.into(),
-        "SCALL" => Instruction::SCALL.into(),
-        "SRET" => Instruction::SRET.into(),
+        "RET" => Ok(Instruction::RET.into()),
+        "NOP" => Ok(Instruction::NOP.into()),
+        "HALT" => Ok(Instruction::HALT.into()),
+        "SCALL" => Ok(Instruction::SCALL.into()),
+        "SRET" => Ok(Instruction::SRET.into()),
 
         // rrr
-        "ADDR" => rrr(&args, |rd, rs1, rs2| Instruction::ADDR { rd, rs1, rs2 })?,
-        "SUBR" => rrr(&args, |rd, rs1, rs2| Instruction::SUBR { rd, rs1, rs2 })?,
-        "ANDR" => rrr(&args, |rd, rs1, rs2| Instruction::ANDR { rd, rs1, rs2 })?,
-        "ORR" => rrr(&args, |rd, rs1, rs2| Instruction::ORR { rd, rs1, rs2 })?,
-        "XORR" => rrr(&args, |rd, rs1, rs2| Instruction::XORR { rd, rs1, rs2 })?,
-        "MULR" => rrr(&args, |rd, rs1, rs2| Instruction::MULR { rd, rs1, rs2 })?,
-        "DIVR" => rrr(&args, |rd, rs1, rs2| Instruction::DIVR { rd, rs1, rs2 })?,
-        "REMR" => rrr(&args, |rd, rs1, rs2| Instruction::REMR { rd, rs1, rs2 })?,
-        "SHLR" => rrr(&args, |rd, rs1, rs2| Instruction::SHLR { rd, rs1, rs2 })?,
-        "SHRR" => rrr(&args, |rd, rs1, rs2| Instruction::SHRR { rd, rs1, rs2 })?,
-        "SARR" => rrr(&args, |rd, rs1, rs2| Instruction::SARR { rd, rs1, rs2 })?,
+        "ADDR" => rrr(&args, |rd, rs1, rs2| {
+            Instruction::ADDR { rd, rs1, rs2 }.into()
+        }),
+        "SUBR" => rrr(&args, |rd, rs1, rs2| {
+            Instruction::SUBR { rd, rs1, rs2 }.into()
+        }),
+        "ANDR" => rrr(&args, |rd, rs1, rs2| {
+            Instruction::ANDR { rd, rs1, rs2 }.into()
+        }),
+        "ORR" => rrr(&args, |rd, rs1, rs2| {
+            Instruction::ORR { rd, rs1, rs2 }.into()
+        }),
+        "XORR" => rrr(&args, |rd, rs1, rs2| {
+            Instruction::XORR { rd, rs1, rs2 }.into()
+        }),
+        "MULR" => rrr(&args, |rd, rs1, rs2| {
+            Instruction::MULR { rd, rs1, rs2 }.into()
+        }),
+        "DIVR" => rrr(&args, |rd, rs1, rs2| {
+            Instruction::DIVR { rd, rs1, rs2 }.into()
+        }),
+        "REMR" => rrr(&args, |rd, rs1, rs2| {
+            Instruction::REMR { rd, rs1, rs2 }.into()
+        }),
+        "SHLR" => rrr(&args, |rd, rs1, rs2| {
+            Instruction::SHLR { rd, rs1, rs2 }.into()
+        }),
+        "SHRR" => rrr(&args, |rd, rs1, rs2| {
+            Instruction::SHRR { rd, rs1, rs2 }.into()
+        }),
+        "SARR" => rrr(&args, |rd, rs1, rs2| {
+            Instruction::SARR { rd, rs1, rs2 }.into()
+        }),
 
         // rri
-        "ADD" => rri(&args, |rd, rs1, imm| Instruction::ADD { rd, rs1, imm })?,
-        "SUB" => rri(&args, |rd, rs1, imm| Instruction::SUB { rd, rs1, imm })?,
-        "AND" => rri(&args, |rd, rs1, imm| Instruction::AND { rd, rs1, imm })?,
-        "OR" => rri(&args, |rd, rs1, imm| Instruction::OR { rd, rs1, imm })?,
-        "XOR" => rri(&args, |rd, rs1, imm| Instruction::XOR { rd, rs1, imm })?,
-        "MUL" => rri(&args, |rd, rs1, imm| Instruction::MUL { rd, rs1, imm })?,
-        "DIV" => rri(&args, |rd, rs1, imm| Instruction::DIV { rd, rs1, imm })?,
-        "REM" => rri(&args, |rd, rs1, imm| Instruction::REM { rd, rs1, imm })?,
-        "SHL" => rri(&args, |rd, rs1, imm| Instruction::SHL { rd, rs1, imm })?,
-        "SHR" => rri(&args, |rd, rs1, imm| Instruction::SHR { rd, rs1, imm })?,
-        "SAR" => rri(&args, |rd, rs1, imm| Instruction::SAR { rd, rs1, imm })?,
+        "ADD" => rri(&args, |rd, rs1, imm| {
+            Instruction::ADD { rd, rs1, imm }.into()
+        }),
+        "SUB" => rri(&args, |rd, rs1, imm| {
+            Instruction::SUB { rd, rs1, imm }.into()
+        }),
+        "AND" => rri(&args, |rd, rs1, imm| {
+            Instruction::AND { rd, rs1, imm }.into()
+        }),
+        "OR" => rri(&args, |rd, rs1, imm| {
+            Instruction::OR { rd, rs1, imm }.into()
+        }),
+        "XOR" => rri(&args, |rd, rs1, imm| {
+            Instruction::XOR { rd, rs1, imm }.into()
+        }),
+        "MUL" => rri(&args, |rd, rs1, imm| {
+            Instruction::MUL { rd, rs1, imm }.into()
+        }),
+        "DIV" => rri(&args, |rd, rs1, imm| {
+            Instruction::DIV { rd, rs1, imm }.into()
+        }),
+        "REM" => rri(&args, |rd, rs1, imm| {
+            Instruction::REM { rd, rs1, imm }.into()
+        }),
+        "SHL" => rri(&args, |rd, rs1, imm| {
+            Instruction::SHL { rd, rs1, imm }.into()
+        }),
+        "SHR" => rri(&args, |rd, rs1, imm| {
+            Instruction::SHR { rd, rs1, imm }.into()
+        }),
+        "SAR" => rri(&args, |rd, rs1, imm| {
+            Instruction::SAR { rd, rs1, imm }.into()
+        }),
 
         // ri
-        "LUI" => ri(&args, |rd, imm| Instruction::LUI { rd, imm })?,
-        "LOADPC" => ri(&args, |rd, imm| Instruction::LOADPC { rd, imm })?,
-        "APC" => ri(&args, |rd, imm| Instruction::APC { rd, imm })?,
+        "LUI" => ri(&args, |rd, imm| Instruction::LUI { rd, imm }.into()),
+        "LOADPC" => ri(&args, |rd, imm| Instruction::LOADPC { rd, imm }.into()),
+        "APC" => ri(&args, |rd, imm| Instruction::APC { rd, imm }.into()),
 
         // memory
-        "LOAD" => rri(&args, |rd, rs1, imm| Instruction::LOAD { rd, rs1, imm })?,
-        "LOADB" => rri(&args, |rd, rs1, imm| Instruction::LOADB { rd, rs1, imm })?,
-        "LOADH" => rri(&args, |rd, rs1, imm| Instruction::LOADH { rd, rs1, imm })?,
-
-        "STORE" => {
-            let (rs1, rs2, imm) = parse_store(&args)?;
+        "LOAD" => rri(&args, |rd, rs1, imm| {
+            Instruction::LOAD { rd, rs1, imm }.into()
+        }),
+        "LOADB" => rri(&args, |rd, rs1, imm| {
+            Instruction::LOADB { rd, rs1, imm }.into()
+        }),
+        "LOADH" => rri(&args, |rd, rs1, imm| {
+            Instruction::LOADH { rd, rs1, imm }.into()
+        }),
+        "STORE" => rri(&args, |rs1, rs2, imm| {
             Instruction::STORE { rs1, rs2, imm }.into()
-        }
-        "STOREB" => {
-            let (rs2, rs1, imm) = parse_storeb(&args)?;
-            Instruction::STOREB { rs2, rs1, imm }.into()
-        }
-        "STOREH" => {
-            let (rs2, rs1, imm) = parse_storeb(&args)?;
-            Instruction::STOREH { rs2, rs1, imm }.into()
-        }
+        }),
+        "STOREB" => rri(&args, |rs1, rs2, imm| {
+            Instruction::STOREB { rs1, rs2, imm }.into()
+        }),
 
+        "STOREH" => rri(&args, |rs1, rs2, imm| {
+            Instruction::STOREH { rs1, rs2, imm }.into()
+        }),
         // control
-        "JMP" => Instruction::JMP {
+        "JMP" => Ok(Instruction::JMP {
             imm: parse_imm26(args.get(0))?,
         }
-        .into(),
-        "CALL" => Instruction::CALL {
+        .into()),
+        "CALL" => Ok(Instruction::CALL {
             imm: parse_imm26(args.get(0))?,
         }
-        .into(),
+        .into()),
 
-        "JMPR" => {
-            if args.len() != 2 {
-                anyhow::bail!("expected: rs imm");
-            }
-            Instruction::JMPR {
-                rs: parse_reg(args[0])?,
-                imm: parse_imm16(args.get(1))?,
-            }
-            .into()
-        }
-
+        "JMPR" => ri(&args, |rs1, imm| Instruction::JMPR { rs1, imm }.into()),
         // branch
-        "BEQ" => branch(&args, |a, b, i| Instruction::BEQ {
-            rs1: a,
-            rs2: b,
-            imm: i,
-        })?,
-        "BNE" => branch(&args, |a, b, i| Instruction::BNE {
-            rs1: a,
-            rs2: b,
-            imm: i,
-        })?,
-        "BLT" => branch(&args, |a, b, i| Instruction::BLT {
-            rs1: a,
-            rs2: b,
-            imm: i,
-        })?,
-        "BGT" => branch(&args, |a, b, i| Instruction::BGT {
-            rs1: a,
-            rs2: b,
-            imm: i,
-        })?,
-        "BLE" => branch(&args, |a, b, i| Instruction::BLE {
-            rs1: a,
-            rs2: b,
-            imm: i,
-        })?,
-        "BGE" => branch(&args, |a, b, i| Instruction::BGE {
-            rs1: a,
-            rs2: b,
-            imm: i,
-        })?,
+        "BEQ" => rri(&args, |rs1, rs2, imm| {
+            Instruction::BEQ { rs1, rs2, imm }.into()
+        }),
+
+        "BNE" => rri(&args, |rs1, rs2, imm| {
+            Instruction::BNE { rs1, rs2, imm }.into()
+        }),
+
+        "BLT" => rri(&args, |rs1, rs2, imm| {
+            Instruction::BLT { rs1, rs2, imm }.into()
+        }),
+
+        "BGT" => rri(&args, |rs1, rs2, imm| {
+            Instruction::BGT { rs1, rs2, imm }.into()
+        }),
+
+        "BLE" => rri(&args, |rs1, rs2, imm| {
+            Instruction::BLE { rs1, rs2, imm }.into()
+        }),
+
+        "BGE" => rri(&args, |rs1, rs2, imm| {
+            Instruction::BGE { rs1, rs2, imm }.into()
+        }),
 
         // sys
-        "SYSR" => {
-            if args.len() != 2 {
-                anyhow::bail!("expected: rd imm");
-            }
-            Instruction::SYSR {
-                rd: parse_reg(args[0])?,
-                imm: parse_imm16(args.get(1))?,
-            }
-            .into()
-        }
+        "SYSR" => ri(&args, |rd, imm| Instruction::SYSR { rd, imm }.into()),
 
-        "SYSW" => {
-            if args.len() != 2 {
-                anyhow::bail!("expected: rs1 imm");
-            }
-            Instruction::SYSW {
-                rs1: parse_reg(args[0])?,
-                imm: parse_imm16(args.get(1))?,
-            }
-            .into()
-        }
-
+        "SYSW" => ri(&args, |rs1, imm| Instruction::SYSW { rs1, imm }.into()),
         // atomics
         "LR" => {
             let (rd, rs1) = (parse_reg(args[0])?, parse_reg(args[1])?);
-            Instruction::LR { rd, rs1 }.into()
+            Ok(Instruction::LR { rd, rs1 }.into())
         }
-        "SC" => {
-            let command = rrr(&args, |a, b, c| Instruction::SC {
+        "SC" => rrr(&args, |a, b, c| {
+            Instruction::SC {
                 rd: a,
                 rs1: b,
                 rs2: c,
-            })?;
-            command.into()
-        }
+            }
+            .into()
+        }),
 
         // misc
         "SEL" => {
@@ -374,78 +325,59 @@ fn parse_op(line: &str) -> Result<Command> {
                 parse_reg(args[2])?,
                 parse_reg(args[3])?,
             );
-            Instruction::SEL {
+            Ok(Instruction::SEL {
                 rd: a,
                 rs1: b,
                 rs2: c,
                 rs3: d,
             }
-            .into()
+            .into())
         }
 
         "CTZ" => {
             let (rd, rs1) = (parse_reg(args[0])?, parse_reg(args[1])?);
-            Instruction::CTZ { rd, rs1 }.into()
+            Ok(Instruction::CTZ { rd, rs1 }.into())
         }
 
         "CLZ" => {
             let (rd, rs1) = (parse_reg(args[0])?, parse_reg(args[1])?);
-            Instruction::CLZ { rd, rs1 }.into()
+            Ok(Instruction::CLZ { rd, rs1 }.into())
         }
 
         "NOT" => {
             let (rd, rs1) = (parse_reg(args[0])?, parse_reg(args[1])?);
-            Instruction::NOT { rd, rs1 }.into()
+            Ok(Instruction::NOT { rd, rs1 }.into())
         }
 
         // compare
-        "LTR" => cmp(&args, |a, b, i| Instruction::LTR {
-            rd: a,
-            rs2: b,
-            imm: i,
-        })?,
-        "EQR" => cmp(&args, |a, b, i| Instruction::EQR {
-            rd: a,
-            rs2: b,
-            imm: i,
-        })?,
-        "LTU" => cmp(&args, |a, b, i| Instruction::LTU {
-            rd: a,
-            rs2: b,
-            imm: i,
-        })?,
-        "EQU" => cmp(&args, |a, b, i| Instruction::EQU {
-            rd: a,
-            rs2: b,
-            imm: i,
-        })?,
-        "LTS" => cmp(&args, |a, b, i| Instruction::LTS {
-            rd: a,
-            rs2: b,
-            imm: i,
-        })?,
-        "EQS" => cmp(&args, |a, b, i| Instruction::EQS {
-            rd: a,
-            rs2: b,
-            imm: i,
-        })?,
+        "LTR" => rrr(&args, |rd, rs1, rs2| {
+            Instruction::LTR { rd, rs1, rs2 }.into()
+        }),
+
+        "EQR" => rrr(&args, |rd, rs1, rs2| {
+            Instruction::EQR { rd, rs1, rs2 }.into()
+        }),
+        "LT" => rri(&args, |rd, rs1, imm| {
+            Instruction::LT { rd, rs1, imm }.into()
+        }),
+        "EQ" => rri(&args, |rd, rs1, imm| {
+            Instruction::EQ { rd, rs1, imm }.into()
+        }),
 
         _ => anyhow::bail!("unknown opcode: {}", op),
-    })
+    }
 }
 
-/* missing small helpers */
-
-fn parse_rd_imm16(args: &[&str]) -> Result<(u8, Immediate<u16>)> {
+fn parse_rd_imm16(args: &[&str]) -> Result<(u8, Immediate<i16>)> {
     if args.len() != 2 {
         anyhow::bail!("expected: rd imm");
     }
     Ok((parse_reg(args[0])?, parse_imm16(args.get(1))?))
 }
 
-fn parse_rd_imm32(args: &[&str]) -> Result<(u8, Immediate<u32>)> {
+fn parse_rd_imm32(args: &[&str]) -> Result<(u8, Immediate<i32>)> {
     if args.len() != 2 {
         anyhow::bail!("expected: rd imm");
     }
-    Ok((parse_reg(args[0])?, parse_imm26(args.get(1))?))
+    Ok((parse_reg(args[0])?, parse_imm32(args.get(1))?))
 }

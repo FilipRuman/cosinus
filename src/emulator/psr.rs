@@ -2,9 +2,9 @@ use crate::emulator::thread::Thread;
 
 #[repr(i32)]
 pub enum PsrBitMask {
-    KernelPrivelage = 1 << 31,
-    EnableInterrupts = 1 << 30,
-    HALT = 1 << 29,
+    KernelPrivelage = 1,
+    EnableInterrupts = 1 << 1,
+    HALT = 1 << 2,
 }
 impl Thread {
     pub fn write_psr_bit(&mut self, bit: PsrBitMask, val: bool) {

@@ -1,4 +1,4 @@
-use log::{debug, info};
+use log::{debug, error, info, trace};
 
 use crate::emulator::{interrupts::ExceptionType, memory::MEMORY, thread::Thread};
 
@@ -10,12 +10,9 @@ impl Thread {
     pub fn run_current_instruction(&mut self) {
         let addr = self.pc as usize;
         let instruction = unsafe { MEMORY.read(addr) };
-        debug!(
-            "run_current_instruction: {:#x} {:#b}",
-            instruction as u32, instruction as u32
-        );
         self.handle_instruction(instruction);
         self.pc += 4;
+        trace!("pc: {}", self.pc);
     }
 
     pub fn test_parse_instruction(instruction: i32) {
@@ -28,7 +25,7 @@ impl Thread {
         let r1_imm16 = ((instruction >> 5) as i16) & IMM16_MASK;
         let imm26 = (instruction as i32) & IMM26_MASK;
         debug!(
-            "handle_instruction optcode:{:#x};{:032b} r0:{:#x} r1:{:#x} r2:{:#x} r3:{:#x} r2_imm16:{:#x} r1_imm16:{:#x} imm26:{:#x} ",
+            "handle_instruction optcode:{:#x};{:032b} r0:{:#x} r1:{:#x} r2:{:#x} r3:{:#x} r2_imm16:{:#x} r1_imm16:{:#x} imm26:{:#x}",
             optcode as u32,
             optcode as u32,
             r0 as u32,
@@ -93,11 +90,11 @@ impl Thread {
 
             // --- Memory ---
             0x17 => self.load(r0, r1, r2_imm16),
-            0x18 => self.store(r2, r1, r2_imm16),
+            0x18 => self.store(r0, r1, r2_imm16),
             0x19 => self.loadb(r0, r1, r2_imm16),
-            0x1A => self.storeb(r2, r1, r2_imm16),
+            0x1A => self.storeb(r0, r1, r2_imm16),
             0x1B => self.loadh(r0, r1, r2_imm16),
-            0x1C => self.storeh(r2, r1, r2_imm16),
+            0x1C => self.storeh(r0, r1, r2_imm16),
             0x1D => self.loadpc(r0, r1_imm16),
 
             // --- Control Flow ---
@@ -119,7 +116,7 @@ impl Thread {
             0x29 => self.scall(),
             0x2A => self.sret(),
             0x2B => self.sysr(r0, r1_imm16),
-            0x2C => self.sysw(r1, r1_imm16),
+            0x2C => self.sysw(r0, r1_imm16),
 
             // --- Atomic ---
             0x2D => self.lr(r0, r1),
@@ -132,16 +129,15 @@ impl Thread {
             // --- Compare / Utility ---
             0x31 => self.ltr(r0, r1, r2),
             0x32 => self.eqr(r0, r1, r2),
-            0x33 => self.ltu(r0, r1, r2_imm16),
-            0x34 => self.equ(r0, r1, r2_imm16),
-            0x35 => self.lts(r0, r1, r2_imm16),
-            0x36 => self.eqs(r0, r1, r2_imm16),
+            0x33 => self.lt(r0, r1, r2_imm16),
+            0x34 => self.eq(r0, r1, r2_imm16),
             0x37 => self.sel(r0, r1, r2, r3),
             0x38 => self.ctz(r0, r1),
             0x39 => self.clz(r0, r1),
             0x3A => self.not(r0, r1),
 
             _ => {
+                error!("Unknown instruction!");
                 self.trigger_exception(ExceptionType::UnknownInstructionOptcode);
             }
         };

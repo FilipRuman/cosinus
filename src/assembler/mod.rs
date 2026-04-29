@@ -28,11 +28,11 @@ pub fn assemble_commands(to_assemble: Vec<Command>) -> Result<Vec<i32>> {
             }
 
             Command::Macro(_macro) => {
-                let instructions: Vec<Instruction> = _macro.into();
-                pc += instructions.len();
+                let instructions: Result<Vec<Instruction>> = _macro.into();
+                pc += instructions?.len();
             }
             Command::Label(name) => {
-                labels.insert(name, pc + 1);
+                labels.insert(name, pc - 1);
             }
             Command::RawData(data) => pc += data.len(),
         }
@@ -49,9 +49,9 @@ pub fn assemble_commands(to_assemble: Vec<Command>) -> Result<Vec<i32>> {
             }
             Command::Label(_) => {}
             Command::Macro(_macro) => {
-                let instructions: Vec<Instruction> = _macro.into();
+                let instructions: Result<Vec<Instruction>> = _macro.into();
 
-                for instruction in instructions {
+                for instruction in instructions? {
                     output.push(instruction.encode(&labels, pc).with_context(|| {
                         format!(
                             "instruction:'{instruction:?}', nr:'{instr_nr}' labels: '{labels:?}'"
@@ -62,7 +62,7 @@ pub fn assemble_commands(to_assemble: Vec<Command>) -> Result<Vec<i32>> {
             }
 
             Command::RawData(data) => {
-                output.append(&mut data.clone());
+                data.clone().iter().for_each(|val| output.push(*val));
                 pc += data.len()
             }
         }

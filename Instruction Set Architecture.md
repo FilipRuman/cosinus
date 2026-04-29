@@ -20,6 +20,8 @@ Legend:
 - Context switching support: software managed.
 - Little-endian
 - All instructions as well as PC use byte addresses.
+- Immidiates on all expressions except binary operations(or, and, xor -> zero
+  extended imm16) are sign extended up to 32 bit
 
 ## Address Space
 
@@ -175,7 +177,7 @@ Notes:
 |  U   |  ADDR  | 0x00 | rd, rs1, rs2 | rd = rs1 + rs2         |
 |  U   |  SUBR  | 0x01 | rd, rs1, rs2 | rd = rs1 - rs2         |
 |  U   |  ANDR  | 0x02 | rd, rs1, rs2 | rd = rs1 & rs2         |
-|  U   |  ORR   | 0x03 | rd, rs1, rs2 | rd = rs1               |
+|  U   |  ORR   | 0x03 | rd, rs1, rs2 | rd = rs1 or rs2        |
 |  U   |  XORR  | 0x04 | rd, rs1, rs2 | rd = rs1 ^ rs2         |
 |  U   |  MULR  | 0x05 | rd, rs1, rs2 | rd = rs1 * rs2         |
 |  U   |  DIVR  | 0x06 | rd, rs1, rs2 | rd = rs1 / rs2         |
@@ -193,7 +195,7 @@ Notes:
 |  U   |  ADD   | 0x0B | rd, rs1, imm16 | rd = rs1 + imm         |
 |  U   |  SUB   | 0x0C | rd, rs1, imm16 | rd = rs1 - imm         |
 |  U   |  AND   | 0x0D | rd, rs1, imm16 | rd = rs1 & imm         |
-|  U   |   OR   | 0x0E | rd, rs1, imm16 | rd = rs1               |
+|  U   |   OR   | 0x0E | rd, rs1, imm16 | rd = rs1 or imm        |
 |  U   |  XOR   | 0x0F | rd, rs1, imm16 | rd = rs1 ^ imm         |
 |  U   |  MUL   | 0x10 | rd, rs1, imm16 | rd = rs1 * imm         |
 |  U   |  DIV   | 0x11 | rd, rs1, imm16 | rd = rs1 / imm         |
@@ -211,24 +213,24 @@ Notes:
 | Mode | Opcode | Hex  | Inputs          | Meaning            |
 | :--: | :----: | :--: | :-------------- | :----------------- |
 |  U   |  LOAD  | 0x17 | rd, rs1, imm16  | rd = *(rs1 + imm)  |
-|  U   | STORE  | 0x18 | rs2, rs1, imm16 | *(rs1 + imm) = rs2 |
+|  U   | STORE  | 0x18 | rs1, rs2, imm16 | *(rs1 + imm) = rs2 |
 |  U   | LOADB  | 0x19 | rd, rs1, imm16  | load 8-bit         |
-|  U   | STOREB | 0x1A | rs2, rs1, imm16 | store 8-bit        |
+|  U   | STOREB | 0x1A | rs1, rs2, imm16 | store 8-bit        |
 |  U   | LOADH  | 0x1B | rd, rs1, imm16  | load 16-bit        |
-|  U   | STOREH | 0x1C | rs2, rs1, imm16 | store 16-bit       |
+|  U   | STOREH | 0x1C | rs1, rs2, imm16 | store 16-bit       |
 |  U   | LOADPC | 0x1D | rd, imm16       | rd = *(PC + imm)   |
 
 ---
 
 ### Control Flow
 
-| Mode | Opcode | Hex  | Inputs    | Meaning         |
-| :--: | :----: | :--: | :-------- | :-------------- |
-|  U   |  JMP   | 0x1E | imm26     | PC += imm       |
-|  U   |  CALL  | 0x1F | imm26     | ra = PC+4; jump |
-|  U   |  RET   | 0x20 | —         | PC = ra         |
-|  U   |  JMPR  | 0x21 | rs, imm16 | PC = rs + imm   |
-|  U   |  APC   | 0x22 | rd, imm16 | rd = PC + imm   |
+| Mode | Opcode | Hex  | Inputs    | Meaning       |
+| :--: | :----: | :--: | :-------- | :------------ |
+|  U   |  JMP   | 0x1E | imm26     | PC += imm     |
+|  U   |  CALL  | 0x1F | imm26     | ra = PC; jump |
+|  U   |  RET   | 0x20 | —         | PC = ra       |
+|  U   |  JMPR  | 0x21 | rs, imm16 | PC = rs + imm |
+|  U   |  APC   | 0x22 | rd, imm16 | rd = PC + imm |
 
 ---
 
@@ -295,10 +297,8 @@ Sysregs: 0. PSR
 | :--: | :----: | :--: | :---------------- | :------------------- |
 |  U   |  LTR   | 0x31 | rd, rs1, rs2      | rd = (rs1 < rs2)     |
 |  U   |  EQR   | 0x32 | rd, rs1, rs2      | rd = (rs1 == rs2)    |
-|  U   |  LTU   | 0x33 | rd, rs1, imm16    | unsigned <           |
-|  U   |  EQU   | 0x34 | rd, rs1, imm16    | unsigned ==          |
-|  U   |  LTS   | 0x35 | rd, rs1, imm16    | signed <             |
-|  U   |  EQS   | 0x36 | rd, rs1, imm16    | signed ==            |
+|  U   |   LT   | 0x33 | rd, rs1, imm16    | rd = rs1 < imm16     |
+|  U   |   EQ   | 0x34 | rd, rs1, imm16    | rd = rs1 == imm16    |
 |  U   |  SEL   | 0x37 | rd, rs1, rs2, rs3 | rd = rs3 ? rs1 : rs2 |
 |  U   |  CTZ   | 0x38 | rd, rs1           | trailing zeros       |
 |  U   |  CLZ   | 0x39 | rd, rs1           | leading zeros        |

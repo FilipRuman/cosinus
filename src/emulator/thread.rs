@@ -1,8 +1,8 @@
-use log::{info, warn};
+use log::{debug, error, info, warn};
 use std::time::Duration;
-use tokio::time::sleep;
+use tokio::time::{error, sleep};
 
-use crate::emulator::psr::PsrBitMask;
+use crate::emulator::{fb::FramebufferHandle, memory::MEMORY, psr::PsrBitMask};
 
 pub struct Thread {
     pub id: u8,
@@ -24,11 +24,12 @@ pub struct Thread {
     pub tid: i32,
     /// exception type register
     pub etr: i32,
+    pub frame_buffer_handle: Option<FramebufferHandle>,
 }
 
 const GPR_COUNT: usize = 32;
 impl Thread {
-    pub fn new(id: u8) -> Self {
+    pub fn new(id: u8, frame_buffer_handle: Option<FramebufferHandle>) -> Self {
         Self {
             id,
             gpr: vec![0i32; GPR_COUNT],
@@ -40,6 +41,7 @@ impl Thread {
             epc: 0,
             tid: id as i32,
             etr: 0,
+            frame_buffer_handle: frame_buffer_handle,
         }
     }
 
@@ -74,11 +76,16 @@ impl Thread {
     /// Quits on HALT
     pub fn run_test_loop(&mut self) {
         self.gpr[0] = 0;
-        info!("RUN TEST LOOP!");
+        info!("RUN TEST LOOP!{} {}", self.psr, self.ivt);
         loop {
+            let addr = self.pc as usize;
+            let instruction = unsafe { MEMORY.read(addr) };
             if self.should_trigger_an_interrupt() {
                 self.handle_interrupt();
             } else if self.read_psr_bit(PsrBitMask::HALT) {
+                break;
+            } else if instruction == 0 {
+                error!("Hit an zero instruction in a test code!");
                 break;
             } else {
                 self.run_current_instruction();

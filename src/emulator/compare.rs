@@ -1,3 +1,5 @@
+use log::debug;
+
 use crate::emulator::thread::Thread;
 impl Thread {
     /// rd = (rs1 < rs2) signed
@@ -10,28 +12,12 @@ impl Thread {
         self.gpr[rd as usize] = (self.gpr[rs1 as usize] == self.gpr[rs2 as usize]) as i32;
     }
 
-    /// rd = (rs1 < imm) unsigned
-    pub fn ltu(&mut self, rd: u8, rs1: u8, imm: i16) {
-        let a = self.gpr[rs1 as usize] as u32;
-        let b = (imm as i32) as u32; // preserve sign-extended bit pattern
-        self.gpr[rd as usize] = (a < b) as i32;
-    }
-
-    /// rd = (rs1 == imm) unsigned
-    pub fn equ(&mut self, rd: u8, rs1: u8, imm: i16) {
-        let a = self.gpr[rs1 as usize] as u32;
-        let b = (imm as i32) as u32;
-        self.gpr[rd as usize] = (a == b) as i32;
-    }
-
-    /// rd = (rs1 < imm) signed
-    pub fn lts(&mut self, rd: u8, rs1: u8, imm: i16) {
+    pub fn lt(&mut self, rd: u8, rs1: u8, imm: i16) {
         let b = imm as i32;
         self.gpr[rd as usize] = (self.gpr[rs1 as usize] < b) as i32;
     }
 
-    /// rd = (rs1 == imm) signed
-    pub fn eqs(&mut self, rd: u8, rs1: u8, imm: i16) {
+    pub fn eq(&mut self, rd: u8, rs1: u8, imm: i16) {
         let b = imm as i32;
         self.gpr[rd as usize] = (self.gpr[rs1 as usize] == b) as i32;
     }
