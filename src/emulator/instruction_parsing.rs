@@ -8,7 +8,7 @@ const IMM16_MASK: i16 = ((1u32 << 16) - 1) as i16; // 16 bits
 const IMM26_MASK: i32 = ((1u32 << 26) - 1) as i32; // 26 bits
 impl Thread {
     pub fn run_current_instruction(&mut self) {
-        let addr = self.pc as usize;
+        let addr = self.pc as u32;
         let instruction = unsafe { MEMORY.read(addr) };
         self.handle_instruction(instruction);
         self.pc += 4;

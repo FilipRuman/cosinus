@@ -78,15 +78,14 @@ impl Thread {
         self.gpr[0] = 0;
         info!("RUN TEST LOOP!{} {}", self.psr, self.ivt);
         loop {
-            let addr = self.pc as usize;
+            let addr = self.pc as u32;
             let instruction = unsafe { MEMORY.read(addr) };
             if self.should_trigger_an_interrupt() {
                 self.handle_interrupt();
             } else if self.read_psr_bit(PsrBitMask::HALT) {
                 break;
             } else if instruction == 0 {
-                error!("Hit an zero instruction in a test code!");
-                break;
+                panic!("Hit an zero instruction in a test code!");
             } else {
                 self.run_current_instruction();
             }

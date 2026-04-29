@@ -155,7 +155,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "colog",
- "libc",
  "log",
  "minifb",
  "tokio",

@@ -24,6 +24,7 @@ pub mod tests {
         compare()?;
         branching()?;
         syscalls()?;
+        devices()?;
         Ok(())
     }
 
@@ -165,6 +166,7 @@ halt
         // |  U   |  BGT   | 0x26 | rs1, rs2, imm16 | if rs1 greater rs2   |
         // |  U   |  BLE   | 0x27 | rs1, rs2, imm16 | if rs1 <= rs2        |
         // |  U   |  BGE   | 0x28 | rs1, rs2, imm16 | if rs1 >= rs2        |
+
         let instructions = assembler::assemble_from_string(
             "
 add r5 r0 25
@@ -193,14 +195,11 @@ halt
     }
 
     fn syscalls() -> Result<()> {
-        info!("----------");
-        const SYSCALL_FUNC_ADDR: i32 = 0xF0000001u32 as i32;
-        const IVT_ADDR: i32 = 0xF0100000u32 as i32;
-        unsafe { MEMORY.read(IVT_ADDR as usize) }; // read test
-        const IVT_SYSCALL_ADDR: usize =
-            IVT_ADDR as u32 as usize + InterruptType::Syscall as usize * 4;
-        unsafe { MEMORY.write(IVT_SYSCALL_ADDR, SYSCALL_FUNC_ADDR) };
-        unsafe { MEMORY.write(IVT_SYSCALL_ADDR, SYSCALL_FUNC_ADDR) };
+        const SYSCALL_FUNC_ADDR: u32 = 0xF0000001u32;
+        const IVT_ADDR: u32 = 0xF0100000u32;
+        const IVT_SYSCALL_ADDR: u32 = IVT_ADDR + InterruptType::Syscall as u32 * 4;
+        unsafe { MEMORY.write(IVT_SYSCALL_ADDR, SYSCALL_FUNC_ADDR as i32) };
+        unsafe { MEMORY.write(IVT_SYSCALL_ADDR, SYSCALL_FUNC_ADDR as i32) };
         let syscall_instructions = assembler::assemble_from_string(
             "
 add r5 r0 10
@@ -225,7 +224,7 @@ halt
         }
         let mut thread = Thread::new(0, None);
         thread.psr = 0b11;
-        thread.ivt = IVT_ADDR;
+        thread.ivt = IVT_ADDR as i32;
         thread.run_test_loop();
         assert_eq!(thread.gpr[5], 10);
         assert_eq!(thread.gpr[6], 0b11); // Privilege Mode = T Interrupt Enable = T HALT = F  
@@ -233,28 +232,40 @@ halt
         Ok(())
     }
 
-    // D] handle_instruction optcode:0x29;00000000000000000000000000101001 r0:0x0 r1:0x0 r2:0x0 r3:0x0 r2_imm16:0x0 r1_imm16:0x0 imm26:0x0
-    // [T] pc: 4
-    // [D] handle_instruction optcode:0xb;00000000000000000000000000001011 r0:0x5 r1:0x0 r2:0x0 r3:0x0 r2_imm16:0x1 r1_imm16:0x0 imm26:0xa00001
-    // [T] pc: 8
-    // [D] handle_instruction optcode:0x30;00000000000000000000000000110000 r0:0x0 r1:0x0 r2:0x0 r3:0x0 r2_imm16:0x0 r1_imm16:0x0 imm26:0x0
-    // [T] pc: 12
-    // [*] RUN TEST LOOP!
-    // [D] handle_instruction optcode:0x29;00000000000000000000000000101001 r0:0x0 r1:0x0 r2:0x0 r3:0x0 r2_imm16:0x0 r1_imm16:0x0 imm26:0x0
-    // [T] pc: 4
-    // [D] handle_instruction optcode:0x30;00000000000000000000000000110000 r0:0x0 r1:0x0 r2:0x0 r3:0x0 r2_imm16:0x0 r1_imm16:0x0 imm26:0x0
-    // [T] pc: 8
-    // test emulator::test::tests::run_emulator_tests ... FAILED
-    //
-    fn interrupts() -> Result<()> {
-        todo!()
+    fn serial_print_test() -> Result<()> {
+        //   | Serial                (0xE0300000...)
+        //         let instructions = assembler::assemble_from_string(
+        //             "
+        // halt
+        // set32 r4 text
+        // add r5 13
+        // call print
+        // :print # r4:address r5:length
+        //     add r19 r5 0 # chars left
+        //     add r18 r4 0 # r18- current read char
+        //     set32 r17 0xE0300000 # Serial write
+        //
+        //     :print_loop_start
+        //         add r18 r0 1 # increment the read char
+        //         load r20 r18 0 # read char
+        //         store r17 r20 0
+        //
+        //         sub r19 r0 1 # decrement chars left
+        //         bne r19 r0 print_loop_start # if printed the whole lenght return
+        //             ret
+        //
+        //
+        // :text
+        // .data  72 101 108 108 111 32 119 111 114 108 100 33 10 # 'Hello world!\n' 13 bytes
+        // ",
+        //         )
+        //         .context("assembling the test instructions")?;
+        // let thread = emulator::run_test(instructions.clone());
+        Ok(())
     }
-
     fn devices() -> Result<()> {
-        todo!()
-    }
-    fn frame_buffer() -> Result<()> {
-        todo!()
+        // serial_print_test()?;
+        Ok(())
     }
 
     fn privileges() -> Result<()> {

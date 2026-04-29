@@ -30,7 +30,7 @@ pub async fn run() -> Result<()> {
 pub unsafe fn write_instructions_to_memory(base_addr: u32, data: Vec<i32>) {
     unsafe {
         for (i, value) in data.iter().enumerate() {
-            MEMORY.write(base_addr as usize + i * 4, *value);
+            MEMORY.write(base_addr + i as u32 * 4, *value);
         }
     }
 }

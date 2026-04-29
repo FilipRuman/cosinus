@@ -8,11 +8,7 @@ Base: 0xE0300000 Interrupt ID: 3 (fixed)
 
 ### Registers
 
-- +0x00 OUT_INFO (write, 8-bit used)
-- +0x04 OUT_DEBUG (write, 8-bit used)
-- +0x08 OUT_WARN (write, 8-bit used)
-- +0x0C OUT_ERR (write, 8-bit used)
-
+- +0x00 OUT (write, 8-bit used)
 - +0x10 IN_DATA (read, 8-bit)
 - +0x14 STATUS (read)
 - +0x18 CONTROL (write)
@@ -35,8 +31,7 @@ bit 0 → ACK (write 1 to acknowledge input / clear interrupt)
 
 Output:
 
-- writing to OUT_* prints a single byte to stdout
-- channel determines log level (INFO/DEBUG/WARN/ERR)
+- writing to OUT prints a single byte to stdout
 
 Input:
 
@@ -52,7 +47,3 @@ Reading input:
 Acknowledging:
 
 - CPU writes CONTROL.ACK = 1 → clears interrupt
-
-Enable:
-
-- if ENABLE = 0: → no output → input buffer paused

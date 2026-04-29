@@ -51,7 +51,7 @@ impl Thread {
     pub fn handle_interrupt(&mut self) {
         let masked_ipr = self.ipr & !self.imr;
         let interrupt_index = masked_ipr.trailing_zeros() as i32;
-        let ivt_addr = (self.ivt as u32 + interrupt_index as u32 * 4) as usize;
+        let ivt_addr = self.ivt as u32 + interrupt_index as u32 * 4;
         debug!(
             "handle_interrupt! idx:'{interrupt_index}' ivt:{:#x} ivt_addr:{:#x}",
             self.ivt, ivt_addr

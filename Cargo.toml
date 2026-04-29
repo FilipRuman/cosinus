@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-libc = "0.2.186"
 log = "0.4.29"
 colog = "1.4.0"
 anyhow = "1.0.102"

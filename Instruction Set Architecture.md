@@ -59,9 +59,9 @@ instruction execution time.
 - r1 = sp -> stack pointer
 - r2 = ra -> return address
 - r3 = fp -> frame pointer
-- r4–r11 -> arguments / caller-saved
-- r12–r23 -> callee-saved
-- r24–r31 -> reserved / future ABI extension
+- r4–r10 -> arguments / caller-saved
+- r11–r16 -> return / callee-saved
+- r17–r31 -> scratch
 
 ### System Registers
 
@@ -236,14 +236,14 @@ Notes:
 
 ### Branching
 
-| Mode | Opcode | Hex  | Inputs          | Meaning              |
-| :--: | :----: | :--: | :-------------- | :------------------- |
-|  U   |  BEQ   | 0x23 | rs1, rs2, imm16 | if rs1 equal rs2     |
-|  U   |  BNE   | 0x24 | rs1, rs2, imm16 | if rs1 not equal rs2 |
-|  U   |  BLT   | 0x25 | rs1, rs2, imm16 | if rs1 less rs2      |
-|  U   |  BGT   | 0x26 | rs1, rs2, imm16 | if rs1 greater rs2   |
-|  U   |  BLE   | 0x27 | rs1, rs2, imm16 | if rs1 <= rs2        |
-|  U   |  BGE   | 0x28 | rs1, rs2, imm16 | if rs1 >= rs2        |
+| Mode | Opcode | Hex  | Inputs          | Meaning                         |
+| :--: | :----: | :--: | :-------------- | :------------------------------ |
+|  U   |  BEQ   | 0x23 | rs1, rs2, imm16 | if rs1 equal rs2 ->jump imm     |
+|  U   |  BNE   | 0x24 | rs1, rs2, imm16 | if rs1 not equal rs2 ->jump imm |
+|  U   |  BLT   | 0x25 | rs1, rs2, imm16 | if rs1 less rs2 ->jump imm      |
+|  U   |  BGT   | 0x26 | rs1, rs2, imm16 | if rs1 greater rs2 ->jump imm   |
+|  U   |  BLE   | 0x27 | rs1, rs2, imm16 | if rs1 <= rs2 ->jump imm        |
+|  U   |  BGE   | 0x28 | rs1, rs2, imm16 | if rs1 >= rs2 ->jump imm        |
 
 ---
 
