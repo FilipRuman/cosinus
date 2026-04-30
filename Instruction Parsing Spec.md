@@ -80,6 +80,8 @@ Semantics:
 - Not executed as instructions
 - Used for constants, tables, and embedded data
 
+do the same for bytes with .datab
+
 ---
 
 ## MACROS

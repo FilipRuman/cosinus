@@ -25,6 +25,7 @@ pub struct Thread {
     /// exception type register
     pub etr: i32,
     pub frame_buffer_handle: Option<FramebufferHandle>,
+    pub serial_buffer: String,
 }
 
 const GPR_COUNT: usize = 32;
@@ -42,6 +43,7 @@ impl Thread {
             tid: id as i32,
             etr: 0,
             frame_buffer_handle: frame_buffer_handle,
+            serial_buffer: String::new(),
         }
     }
 

@@ -43,7 +43,7 @@ impl Into<Result<Vec<Instruction>>> for &Macro {
                 let rd = *rd;
                 let imm = *match imm {
                     Immediate::Direct(direct) => direct,
-                    Immediate::Label(_) => todo!(),
+                    Immediate::Label(_) => bail!("Labels are not supported for the SET32 macro!"),
                 } as i32;
 
                 let upper = ((imm >> 16) & 0xFFFF) as i16;

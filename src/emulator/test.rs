@@ -24,6 +24,7 @@ pub mod tests {
         compare()?;
         branching()?;
         syscalls()?;
+        privileges()?;
         devices()?;
         Ok(())
     }
@@ -233,47 +234,110 @@ halt
     }
 
     fn serial_print_test() -> Result<()> {
-        //   | Serial                (0xE0300000...)
-        //         let instructions = assembler::assemble_from_string(
-        //             "
-        // halt
-        // set32 r4 text
-        // add r5 13
-        // call print
-        // :print # r4:address r5:length
-        //     add r19 r5 0 # chars left
-        //     add r18 r4 0 # r18- current read char
-        //     set32 r17 0xE0300000 # Serial write
-        //
-        //     :print_loop_start
-        //         add r18 r0 1 # increment the read char
-        //         load r20 r18 0 # read char
-        //         store r17 r20 0
-        //
-        //         sub r19 r0 1 # decrement chars left
-        //         bne r19 r0 print_loop_start # if printed the whole lenght return
-        //             ret
-        //
-        //
-        // :text
-        // .data  72 101 108 108 111 32 119 111 114 108 100 33 10 # 'Hello world!\n' 13 bytes
-        // ",
-        //         )
-        //         .context("assembling the test instructions")?;
-        // let thread = emulator::run_test(instructions.clone());
+        // | Serial                (0xE0300000...)
+        let instructions = assembler::assemble_from_string(
+            "
+        add r4 r0 text
+        add r5 r0 13 # text length
+
+        add r30 r0 20
+        :loop
+        call print
+        sub r30 r30 1
+        bne r30 r0 loop 
+        halt
+        :print # r4:address r5:length
+            add r19 r5 0 # chars left
+            add r18 r4 3 # + 3 shift is needed to read the first char most of the time. r18- current read char
+            set32 r17 0xE0300000 # Serial write
+
+            :print_loop_start
+                add r18 r18 1 # increment the read char
+                load r20 r18 0 # read char
+                store r17 r20 0
+
+                sub r19 r19 1 # decrement chars left
+                bne r19 r0 print_loop_start # if printed the whole lenght return
+                    ret
+
+        :text
+        .datab  72 101 108 108 111 32 119 111 114 108 100 33 10 # 'Hello world!\\n' 13 bytes
+        ",
+        )
+        .context("assembling the test instructions")?;
+        let thread = emulator::run_test(instructions.clone());
         Ok(())
     }
     fn devices() -> Result<()> {
-        // serial_print_test()?;
+        serial_print_test()?;
         Ok(())
     }
 
     fn privileges() -> Result<()> {
-        todo!()
-    }
+        const SYSCALL_FUNC_ADDR: u32 = 0xF0000001u32;
+        const EXCEPTION_FUNC_ADDR: u32 = 0xF000F001u32;
+        const IVT_ADDR: u32 = 0xF0100000u32;
+        const IVT_SYSCALL_ADDR: u32 = IVT_ADDR + InterruptType::Syscall as u32 * 4;
+        const IVT_EXCEPTION__ADDR: u32 = IVT_ADDR + InterruptType::Exception as u32 * 4;
+        unsafe { MEMORY.write(IVT_SYSCALL_ADDR, SYSCALL_FUNC_ADDR as i32) };
+        unsafe { MEMORY.write(IVT_EXCEPTION__ADDR, EXCEPTION_FUNC_ADDR as i32) };
+        {
+            let syscall_instructions = assembler::assemble_from_string(
+                "
+add r5 r0 10
+SYSR r6 0 # psr
+sret
+",
+            )
+            .context("assembling the test syscall instructions")?;
+            unsafe {
+                emulator::write_instructions_to_memory(
+                    SYSCALL_FUNC_ADDR as u32,
+                    syscall_instructions,
+                )
+            };
+        }
 
-    fn atomic() -> Result<()> {
-        todo!()
+        {
+            let exceptions_instructions = assembler::assemble_from_string(
+                "
+add r8 r0 21
+sret
+",
+            )
+            .context("assembling the test syscall instructions")?;
+            unsafe {
+                emulator::write_instructions_to_memory(
+                    EXCEPTION_FUNC_ADDR as u32,
+                    exceptions_instructions,
+                )
+            };
+        }
+
+        let instructions = assembler::assemble_from_string(
+            "
+set32 r30  0xFFFF0001 # Kernel adress
+add r31 r0 66
+store r30 r31 0 # store should succeed because at the beginning thread has kernel privileges  
+scall
+add r31 r0 20
+store r30 r31 0 # privileges changed to user space and this will cause an exception 
+halt
+",
+        )
+        .context("assembling the test instructions")?;
+        unsafe {
+            emulator::write_instructions_to_memory(0, instructions);
+        }
+        let mut thread = Thread::new(0, None);
+        thread.psr = 0b11;
+        thread.ivt = IVT_ADDR as i32;
+        thread.run_test_loop();
+        assert_eq!(unsafe { MEMORY.read(0xFFFF0001) }, 66);
+        assert_eq!(thread.gpr[8], 21);
+        assert_eq!(thread.gpr[5], 10);
+
+        Ok(())
     }
 
     fn compare() -> Result<()> {

@@ -16,6 +16,30 @@ pub fn parse_program(input: &str) -> Result<Vec<Command>> {
             continue;
         }
 
+        // raw byte data -> packed into u32 words
+        if let Some(rest) = line.strip_prefix(".datab") {
+            let bytes = rest
+                .split_whitespace()
+                .map(|x| x.parse::<u8>())
+                .collect::<Result<Vec<_>, _>>()
+                .with_context(|| format!("line {}: invalid .datab", lineno))?;
+
+            let mut values = Vec::with_capacity((bytes.len() + 3) / 4);
+
+            for chunk in bytes.chunks(4) {
+                let mut word: u32 = 0;
+
+                for (i, &b) in chunk.iter().enumerate() {
+                    word |= (b as u32) << (8 * i);
+                }
+
+                // missing bytes are implicitly 0 -> padding already handled
+                values.push(word as i32);
+            }
+
+            out.push(Command::RawData(values));
+            continue;
+        }
         // raw data
         if let Some(rest) = line.strip_prefix(".data") {
             let values = rest

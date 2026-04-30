@@ -1,4 +1,4 @@
-use log::{debug, info};
+use log::{debug, info, trace};
 
 use crate::emulator::{memory::MEMORY, psr::PsrBitMask, thread::Thread};
 #[repr(i32)]
@@ -40,7 +40,7 @@ impl Thread {
     pub fn should_trigger_an_interrupt(&self) -> bool {
         let masked_ipr = self.ipr & !self.imr;
 
-        debug!(
+        trace!(
             "should_trigger_an_interrupt- masked_ipr:{:#b} EnableInterrupts:{} psr:{:#b}",
             masked_ipr,
             self.read_psr_bit(PsrBitMask::EnableInterrupts),

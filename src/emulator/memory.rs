@@ -154,12 +154,11 @@ impl Thread {
     where
         F: Fn(),
     {
+        debug!("handle_memory_store:{addr:#x} value:{value:#x}");
         let addr = addr as u32;
         if addr < 0xD0000000u32 {
-            debug!("1.handle_memory_store");
             store_closure();
         } else {
-            debug!("2.handle_memory_store");
             if addr < 0xE0000000u32 {
                 //Framebuffer
                 if let Some(handle) = &mut self.frame_buffer_handle {
@@ -193,7 +192,6 @@ impl Thread {
     pub fn store(&mut self, rs1: u8, rs2: u8, imm: i16) {
         let addr = self.gpr[rs1 as usize].wrapping_add(imm as i32);
         let value = self.gpr[rs2 as usize];
-        warn!("store! a:{addr} v:{value} v_u:{:#x}", value as u32);
         self.handle_memory_store(addr, value, || unsafe {
             warn!("Closure hit!");
             MEMORY.write(addr as u32, value);
