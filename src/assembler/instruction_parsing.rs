@@ -11,7 +11,7 @@ pub fn parse_program(input: &str) -> Result<Vec<Command>> {
         }
 
         // label
-        if let Some(label) = line.strip_prefix(':') {
+        if let Some(label) = line.strip_suffix(':') {
             out.push(Command::Label(label.trim().to_string()));
             continue;
         }

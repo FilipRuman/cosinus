@@ -1,11 +1,6 @@
-use anyhow::{Context, Result};
-
-use crate::assembler::{
-    instruction::{Immediate, Instruction, Macro},
-    instruction_parsing,
-};
-
+use anyhow::Result;
 mod assembler;
+pub mod compiler;
 pub mod emulator;
 pub mod log;
 mod tests;

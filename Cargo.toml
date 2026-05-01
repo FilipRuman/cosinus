@@ -9,4 +9,3 @@ colog = "1.4.0"
 anyhow = "1.0.102"
 tokio = { version = "1.47.1", features = ["full"] }
 minifb = "0.28.0"
-
