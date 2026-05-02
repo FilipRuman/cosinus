@@ -30,8 +30,9 @@ pub mod tests {
     }
 
     fn instant_halt() -> Result<()> {
-        let instructions = assembler::assemble_commands(vec![Instruction::HALT {}.into()])
-            .context("assembling the test instructions")?;
+        let instructions =
+            assembler::assemble_without_linker_data(vec![Instruction::HALT {}.into()])
+                .context("assembling the test instructions")?;
         let _ = emulator::run_test(instructions.clone());
         let first_instruction = unsafe { emulator::memory::MEMORY.read(0) };
 
@@ -45,7 +46,7 @@ pub mod tests {
 
     fn set() -> Result<()> {
         const TEST_VAL: i32 = 25;
-        let instructions = assembler::assemble_commands(vec![
+        let instructions = assembler::assemble_without_linker_data(vec![
             Macro::Set32 {
                 rd: 5,
                 imm: Immediate::Direct(TEST_VAL as i32),
@@ -125,6 +126,7 @@ halt
         // |  U   |  RET   | 0x20 | —         | PC = ra         |
         // |  U   |  JMPR  | 0x21 | rs, imm16 | PC = rs + imm   |
         // |  U   |  APC   | 0x22 | rd, imm16 | rd = PC + imm   |
+        info!("|control_flow|");
         let instructions = assembler::assemble_from_string(
             "
 call one
@@ -140,10 +142,10 @@ halt
 halt
 halt
 halt
-:one
-or r5 r0 1
+one:
+add r5 r0 1
 ret
-:three
+three:
 or r7 r0 3
 apc r10 -52 # byte space so 13 * 4
 jmpr r10 0
@@ -175,14 +177,14 @@ add r6 r0 -25
 beq r5 r6 end
 bne r5 r6 skip_r20
 add r20 r0 1 # r20 should = 0
-:skip_r20
+skip_r20:
 add r7 r0 0
-:loop_start
+loop_start:
 add r7 r7 1
 BLT r7 r5 loop_start # r7 should = 25
 BGT r6 r5 end
 add r10 r0 1 # r10 should = 1
-:end
+end:
 halt
 ",
         )
@@ -237,21 +239,21 @@ halt
         // | Serial                (0xE0300000...)
         let instructions = assembler::assemble_from_string(
             "
-        add r4 r0 text
+        apc r4 text
         add r5 r0 13 # text length
 
-        add r30 r0 20
-        :loop
+        add r30 r0 2
+        loop:
         call print
         sub r30 r30 1
         bne r30 r0 loop 
         halt
-        :print # r4:address r5:length
+        print: # r4:address r5:length
             add r19 r5 0 # chars left
             add r18 r4 3 # + 3 shift is needed to read the first char most of the time. r18- current read char
             set32 r17 0xE0300000 # Serial write
 
-            :print_loop_start
+            print_loop_start:
                 add r18 r18 1 # increment the read char
                 load r20 r18 0 # read char
                 store r17 r20 0
@@ -260,7 +262,7 @@ halt
                 bne r19 r0 print_loop_start # if printed the whole lenght return
                     ret
 
-        :text
+        text:
         .datab  72 101 108 108 111 32 119 111 114 108 100 33 10 # 'Hello world!\\n' 13 bytes
         ",
         )

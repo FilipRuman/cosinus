@@ -58,7 +58,7 @@ set32 r25 -2236979
 beq r10 r5 253
 scall
 sel 30 20 10 3
-:jump_label
+jump_label:
 halt
 ",
         )?;
@@ -224,7 +224,7 @@ ret
 jmpr r1 8
 apc r2 12
 
-:target
+target:
 halt
 ",
         )?;

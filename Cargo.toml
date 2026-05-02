@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+toml = "1.1.2+spec-1.1.0"
 log = "0.4.29"
 colog = "1.4.0"
 anyhow = "1.0.102"

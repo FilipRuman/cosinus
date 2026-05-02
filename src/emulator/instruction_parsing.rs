@@ -24,7 +24,7 @@ impl Thread {
         let r2_imm16 = (instruction as i16) & IMM16_MASK;
         let r1_imm16 = ((instruction >> 5) as i16) & IMM16_MASK;
         let imm26 = (instruction as i32) & IMM26_MASK;
-        trace!(
+        debug!(
             "handle_instruction optcode:{:#x};{:032b} r0:{:#x} r1:{:#x} r2:{:#x} r3:{:#x} r2_imm16:{:#x} r1_imm16:{:#x} imm26:{:#x}",
             optcode as u32,
             optcode as u32,
@@ -46,7 +46,7 @@ impl Thread {
         let r2_imm16 = (instruction as i16) & IMM16_MASK;
         let r1_imm16 = ((instruction >> 5) as i16) & IMM16_MASK;
         let imm26 = (instruction as i32) & IMM26_MASK;
-        trace!(
+        debug!(
             "handle_instruction optcode:{:#x};{:032b} r0:{:#x} r1:{:#x} r2:{:#x} r3:{:#x} r2_imm16:{:#x} r1_imm16:{:#x} imm26:{:#x} ",
             optcode as u32,
             optcode as u32,

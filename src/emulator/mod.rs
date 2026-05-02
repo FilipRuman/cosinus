@@ -24,7 +24,7 @@ pub async fn run() -> Result<()> {
     let (frame_buffer_handle, frame_buffer_rx) = fb::init()?;
     let thread_0 = Thread::new(0, Some(frame_buffer_handle.clone()));
     tokio::spawn(thread_0.run_loop());
-    fb::run_framebuffer_loop(frame_buffer_rx).await?;
+    // fb::run_framebuffer_loop(frame_buffer_rx).await?;
     Ok(())
 }
 pub unsafe fn write_instructions_to_memory(base_addr: u32, data: Vec<i32>) {

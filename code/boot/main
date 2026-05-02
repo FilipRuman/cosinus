@@ -1,0 +1,6 @@
+halt
+start:
+add r5 r0 21
+call print_hw
+halt
+

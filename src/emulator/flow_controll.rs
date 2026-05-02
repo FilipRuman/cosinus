@@ -7,6 +7,7 @@ impl Thread {
         self.pc += imm;
     }
     pub fn call(&mut self, imm: i32) {
+        debug!("call {imm}");
         self.gpr[Thread::RA] = self.pc; // byte space address -> 4 bytes
         self.pc = self.pc.wrapping_add(imm);
     }

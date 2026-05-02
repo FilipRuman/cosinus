@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::{Context, Result, bail};
+use log::{debug, info};
 
 type Label = String;
 
@@ -477,27 +478,11 @@ impl Into<Command> for Instruction {
         Command::Instr(self)
     }
 }
-fn resolve_i16(imm: &Immediate<i16>, labels: &HashMap<String, usize>, pc: usize) -> i16 {
-    match imm {
-        Immediate::Direct(v) => *v,
-        Immediate::Label(name) => {
-            let target = labels[name];
-            (target as isize - pc as isize - 1) as i16
-        }
-    }
-}
-
-fn resolve_i32(imm: &Immediate<i32>, labels: &HashMap<String, usize>, pc: usize) -> i32 {
-    match imm {
-        Immediate::Direct(v) => *v,
-        Immediate::Label(name) => {
-            let target = labels[name];
-            (target as isize - pc as isize - 1) as i32
-        }
-    }
-}
 impl Instruction {
-    pub fn encode(&self, labels: &HashMap<&String, usize>, pc: usize) -> Result<i32> {
+    pub fn encode<F>(&self, get_offset_for_label: &F, pc: u32) -> Result<i32>
+    where
+        F: Fn(&str, u8) -> Result<i32>,
+    {
         let r = |x: &u8| (*x as i32) & 0x1F;
         let imm16 = |x: i16| (x as i16 as i32) & 0xFFFF;
         let imm26 = |x: i32| (x as i32) & 0x03FF_FFFF;
@@ -506,22 +491,28 @@ impl Instruction {
             match imm {
                 Immediate::Direct(v) => Ok(*v),
                 Immediate::Label(name) => {
-                    let target = *labels.get(name).with_context(|| {
-                        format!("There wasn't a label with name: '{name}' in the labels hashMap")
-                    })?;
-                    Ok(((target as isize - pc as isize) as i16) * 4)
+                    const SIZE: u8 = 15;
+                    let target = get_offset_for_label(name, SIZE)?;
+                    debug!(
+                        "Handle imm16 label: target:'{target}' pc:'{pc}' name:'{name}' out:'{}'",
+                        target as i16 - (pc * 4) as i16
+                    );
+                    Ok(target as i16 - (pc * 4) as i16)
                 }
             }
         };
 
-        let i32 = |imm: &Immediate<i32>| -> Result<i32> {
+        let i26 = |imm: &Immediate<i32>| -> Result<i32> {
             match imm {
                 Immediate::Direct(v) => Ok(*v),
                 Immediate::Label(name) => {
-                    let target = *labels.get(name).with_context(|| {
-                        format!("There wasn't a label with name: '{name}' in the labels hashMap")
-                    })?;
-                    Ok((target as isize - pc as isize) as i32 * 4)
+                    const SIZE: u8 = 25;
+                    let target = get_offset_for_label(name, SIZE)?;
+                    debug!(
+                        "Handle imm26 label: target:'{target}' pc:'{pc}' name:'{name}' out:'{}'",
+                        target - pc as i32 * 4
+                    );
+                    Ok(target - pc as i32 * 4)
                 }
             }
         };
@@ -649,9 +640,9 @@ impl Instruction {
             }
 
             // ===== Control =====
-            Instruction::JMP { imm } => (0x1E << 26) | imm26(i32(imm)?),
+            Instruction::JMP { imm } => (0x1E << 26) | imm26(i26(imm)?),
 
-            Instruction::CALL { imm } => (0x1F << 26) | imm26(i32(imm)?),
+            Instruction::CALL { imm } => (0x1F << 26) | imm26(i26(imm)?),
 
             Instruction::RET => 0x20 << 26,
 

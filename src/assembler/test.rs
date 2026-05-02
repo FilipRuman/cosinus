@@ -18,7 +18,7 @@ mod test {
 
         {
             let manual_or_instr = (0x0E << 26) | (r(&5) << 21) | (r(&5) << 16) | imm16(25);
-            let asm_or_instr = assembler::assemble_commands(vec![
+            let asm_or_instr = assembler::assemble_without_linker_data(vec![
                 Instruction::OR {
                     rd: 5,
                     rs1: 5,
@@ -39,7 +39,7 @@ mod test {
         {
             let manual_halt_instr = (0x30 << 26) | (r(&0) << 21) | (r(&0) << 16) | imm16(0);
             let asm_halt_instr =
-                assembler::assemble_commands(vec![Instruction::HALT {}.into()])?[0];
+                assembler::assemble_without_linker_data(vec![Instruction::HALT {}.into()])?[0];
             info!("MANUAL:{manual_halt_instr:032b}, asm_halt_instr:{asm_halt_instr:032b}");
             assert_eq!(asm_halt_instr, manual_halt_instr as i32);
 

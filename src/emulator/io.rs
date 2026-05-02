@@ -22,6 +22,7 @@ impl Thread {
         todo!("audio is not yet implemented");
     }
     fn handle_serial_write(&mut self, relative_addr: u32, value: u32) -> Result<()> {
+        debug!("handle_serial_write buffer:'{}'", self.serial_buffer);
         match relative_addr {
             0x00 => {
                 let char = value as u8 as char;
