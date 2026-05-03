@@ -50,9 +50,23 @@ Acknowledging:
 
 ## Disk
 
+Disk supports semi async operations-> Data may be **fetched** for multiple
+commands at the same time, BUT the **command sending and core interrupt
+processes aren't thread safe**:
+
+1. Command sending safety must be ensured by the kernel.
+2. Only one core will be interrupted at the time- blocks until Acknowledge
+   command is written to the control register
+
+This design gives me the best of two worlds:
+
+1. Cuts down the data fetch time- fetch data for multiple commands at the same
+   time.
+2. Dead simple- no complicated queue system.
+
 Base: 0xE0000000 Interrupt ID: 0 (fixed)
 
-BLOCK_SIZE = 4096B;
+BLOCK_SIZE = 4096 bytes
 
 ### Registers
 
@@ -68,14 +82,22 @@ BLOCK_SIZE = 4096B;
 
 - bit 0 → READY (0 = busy 1 = ready to use)
 - bit 1 → ERROR (0 = operation succeeded 1 = error)
-- bit 2-7 -> ERROR CODES TODO:
+- bit 8..=15 → COMMAND ID- arbitrary byte value stored for this operation in the
+  control register. Allows for doing multiple async reads for one core.
+- bit 16..=23 -> ERROR CODE BYTE TODO:
 
 ### Control (Bitfield)
 
 Upon write starts executing command with the specified configuration:
 
-- bit 0 → READ/WRITE (0 = read 1 = write) bit 0 → READ/WRITE (0 = read 1 =
-  write)
+Operation type - first 2 bits:
+
+- 00 -> READ
+- 10 -> WRITE
+- 01 -> Acknowledge
+
+bit 8..=15 → COMMAND ID- arbitrary byte value that will be returned in the
+status register. Allows for doing multiple async reads for one core.
 
 ### USAGE
 
@@ -91,11 +113,15 @@ Upon write starts executing command with the specified configuration:
 5. Set the control bit to read.
 6. mark drive as free to use(kernel level not device).
 7. Do something else until gets interrupted by the drive.
-8. Data is ready to use
+8. Check the operation status - Status register
+9. Data is ready to use
+10. Acknowledge- Control register
 
 #### Write
 
 5. Set the control bit to write.
 6. mark drive as free to use(kernel level not device).
 7. Do something else until gets interrupted by the drive.
-8. Upon interrupt data, from the buffer, was written to the specified blocks.
+8. Check the operation status - Status register
+9. Data is ready to use
+10. Acknowledge- Control register
