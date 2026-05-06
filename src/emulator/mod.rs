@@ -8,6 +8,7 @@ pub mod arithmetics;
 pub mod atomic;
 pub mod branching;
 pub mod compare;
+pub mod disk;
 pub mod fb;
 pub mod flow_controll;
 pub mod instruction_parsing;

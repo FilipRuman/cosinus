@@ -280,9 +280,9 @@ halt
         const EXCEPTION_FUNC_ADDR: u32 = 0xF000F001u32;
         const IVT_ADDR: u32 = 0xF0100000u32;
         const IVT_SYSCALL_ADDR: u32 = IVT_ADDR + InterruptType::Syscall as u32 * 4;
-        const IVT_EXCEPTION__ADDR: u32 = IVT_ADDR + InterruptType::Exception as u32 * 4;
+        const IVT_EXCEPTION_ADDR: u32 = IVT_ADDR + InterruptType::Exception as u32 * 4;
         unsafe { MEMORY.write(IVT_SYSCALL_ADDR, SYSCALL_FUNC_ADDR as i32) };
-        unsafe { MEMORY.write(IVT_EXCEPTION__ADDR, EXCEPTION_FUNC_ADDR as i32) };
+        unsafe { MEMORY.write(IVT_EXCEPTION_ADDR, EXCEPTION_FUNC_ADDR as i32) };
         {
             let syscall_instructions = assembler::assemble_from_string(
                 "

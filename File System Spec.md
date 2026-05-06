@@ -19,25 +19,29 @@ The filesystem is a block-based, inode-driven storage system with:
 The filesystem is organized as follows:
 
 ```
-+---------------------------+
-| Superblock |
-+---------------------------+
-| Group Descriptor Table |
-+---------------------------+
-| Block Group 0 |
-| Block Bitmap |
-| Inode Bitmap |
-| Inode Table |
-| Data Blocks |
-+---------------------------+
-| Block Group 1 |
-| Block Bitmap |
-| Inode Bitmap |
-| Inode Table |
-| Data Blocks |
-+---------------------------+
-| ... |
-+---------------------------+
+|Block 0. Superblock Metadata
+|---|   >Group Descriptor Table<  
+    | Block 1. GroupDescriptor 1
+    | Block 2. GroupDescriptor 2
+    | Block X. GroupDescriptor X
+|---|       >Data Blocks<
+    |---|       >Block Group 0<
+        | Block X + 1. Block Group 0 Metadata
+        | Block X + 2. Data Block 0 
+        | Block X + 3. Data Block 1 
+        | Block X + 2 + Y. Data Block Y 
+
+    |---|       >Block Group 1<
+        | Block X + Y + 1. Block Group 1 Metadata
+        | Block X + Y + 2. Data Block 0 
+        | Block X + Y + 3. Data Block 1 
+        | Block X + 2 * Y. Data Block Y
+
+    |---|       >Block Group X<
+        | Block X + X * Y + 1. Block Group X Metadata
+        | Block X + X * Y + 2. Data Block 0 
+        | Block X + X * Y + 3. Data Block 1 
+        | Block X + (X + 1) *  * Y. Data Block Y
 ```
 
 ---
@@ -80,19 +84,6 @@ struct Superblock {
 +------------------+
 ```
 
-### Descriptor
-
-```rust
-struct GroupDescriptor {
-    block_bitmap_start: u32,
-    inode_bitmap_start: u32,
-    inode_table_start: u32,
-    
-    free_blocks_count: u32,
-    free_inodes_count: u32,
-}
-```
-
 #### Allocation Bitmaps
 
 Two bitmaps per group:
@@ -104,6 +95,19 @@ Two bitmaps per group:
 ##### Inode Bitmap
 
 1 bit per inode in group: 1 = used, 0 = free
+
+### Descriptor
+
+```rust
+struct GroupDescriptor {
+    block_bitmap_block_index: u32,
+    inode_bitmap_block_index: u32,
+    inode_table_start_block_index: u32,
+    
+    free_blocks_count: u32,
+    free_inodes_count: u32,
+}
+```
 
 ---
 
@@ -121,16 +125,49 @@ struct Inode {
 
     size: u32,        // bytes
 
-    extents:[u64;12],  // [(u32 base block adress, block count);12] 
+    extents: [u64; 12], // [(high 32 bits: u32 base block index, low 32 bits: block count);12]
 
     flags:u32,
 }
 ```
 
+### Mode
+
+```text
+15            13 12       9 8       6 5       3 2       0
++---------------+-----------+---------+---------+---------+
+|  File Type    | Reserved  | User    | Group   | Other   |
+|   (3 bits)    | (4 bits)  |  rwx    |  rwx    |  rwx    |
++---------------+-----------+---------+---------+---------+
+```
+
+#### File Type (bits 15–13)
+
+- 000 → Regular file
+- 001 → Directory
+- 010 → Symbolic link (optional)
+
+#### Permission Bits (bits 8–0)
+
+- User:
+  - read = 0b100 << 6
+  - write = 0b010 << 6
+  - execute = 0b001 << 6
+
+- Group:
+  - read = 0b100 << 3
+  - write = 0b010 << 3
+  - execute = 0b001 << 3
+
+- Other:
+  - read = 0b100
+  - write = 0b010
+  - execute = 0b001
+
 ## 7. Directories
 
 Directories are files containing directory entries. Entries are packed
-sequentially within data blocks. `inode =` 0 means unused entry.
+sequentially within data blocks. `inode = 0` means unused entry.
 
 ```rust
 struct DirEntry { 

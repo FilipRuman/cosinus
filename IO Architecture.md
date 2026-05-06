@@ -70,7 +70,7 @@ BLOCK_SIZE = 4096 bytes
 
 ### Registers
 
-- +0x00 block_index (write)
+- +0x00 base_block_index (write)
 - +0x04 buffer_address (write)
 - +0x08 block_count(will be used as a buffer size- buffer size = BLOCK_SIZE *
   block count) (write)
