@@ -8,7 +8,7 @@ pub mod tests {
             self,
             instruction::{Immediate, Instruction, Macro},
         },
-        emulator::{self, interrupts::InterruptType, memory::MEMORY, thread::Thread},
+        emulator::{self, disk, interrupts::InterruptType, memory::MEMORY, thread::Thread},
         log::init_log,
     };
 
@@ -26,6 +26,7 @@ pub mod tests {
         syscalls()?;
         privileges()?;
         devices()?;
+        disk::test::test::test_all()?;
         Ok(())
     }
 

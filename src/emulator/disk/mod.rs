@@ -1,7 +1,11 @@
+pub mod entry_traversal;
+pub mod test;
+
 use anyhow::{Context, Ok, Result, bail};
 use bytemuck::{Pod, Zeroable, bytes_of};
+use log::{debug, info};
 use std::{
-    fs::File,
+    fs::{File, OpenOptions},
     io::{Seek, Write},
     os::unix::fs::FileExt,
     sync::LazyLock,
@@ -9,17 +13,17 @@ use std::{
 
 use crate::dir_handling::project_dir;
 
-const INTERNAL_FILE_PATH: &'static str = "disk/disk.fr2";
-static DISK: LazyLock<Disk> = LazyLock::new(|| Disk::new());
+pub(crate) const INTERNAL_FILE_PATH: &'static str = "./disk/disk.fr2";
+pub static DISK: LazyLock<Disk> = LazyLock::new(|| Disk::new());
 unsafe impl Sync for Disk {}
 #[repr(C)]
-#[derive(Pod, Zeroable, Clone, Copy)]
+#[derive(Pod, Zeroable, Clone, Copy, Debug, PartialEq)]
 pub struct SuperBlock {
     pub total_blocks: u32,
     pub total_inodes: u32,
-    // NEEDS TO BE DIVIDABLE BY 8
+    /// NEEDS TO BE DIVIDABLE BY 8
     pub blocks_per_group: u32,
-    // NEEDS TO BE DIVIDABLE BY 8
+    /// NEEDS TO BE DIVIDABLE BY 8
     pub inodes_per_group: u32,
     pub group_count: u32,
     pub inode_size: u32,
@@ -52,6 +56,7 @@ pub fn set_bit_in_block(block_bit_idx: u32, block: &mut Vec<u8>) {
     let mask = 1 << bit;
     block[byte_idx as usize] |= mask;
 }
+
 pub struct FsInfo {
     pub group_descriptor_table_blocks: u32,
     pub inode_table_blocks: u32,
@@ -82,7 +87,7 @@ impl FsInfo {
     }
 }
 #[repr(C)]
-#[derive(Pod, Zeroable, Clone, Copy)]
+#[derive(Pod, Zeroable, Clone, Copy, Debug, PartialEq)]
 pub struct Extent {
     base_block_index: u32,
     block_count: u32,
@@ -115,7 +120,7 @@ pub struct Disk {
     pub metadata: SuperBlock,
     pub fs_info: FsInfo,
 }
-const BLOCK_SIZE_BYTES: u32 = 0x1000;
+pub(crate) const BLOCK_SIZE_BYTES: u32 = 0x1000;
 impl Disk {
     pub fn write_extent(&self, extent: Extent, value: Vec<u8>) -> Result<()> {
         if value.len() as u32 != extent.bytes() {
@@ -148,7 +153,13 @@ impl Disk {
     }
     pub fn new() -> Self {
         let path = project_dir(INTERNAL_FILE_PATH);
-        let internal_file = File::open(path).expect("internal file path for disk is invalid!");
+
+        let internal_file = OpenOptions::new()
+            .write(true)
+            .read(true)
+            .create(true)
+            .open(path)
+            .expect("internal file path for disk is invalid!");
         let metadata = SuperBlock::parse_from_internal_file(&internal_file)
             .expect("parsing metadata for a file system did not succeed!");
         Self {
@@ -266,11 +277,15 @@ impl Disk {
         }
         bail!("All groups were invalid!")
     }
-    pub fn append_to_inode_contents(&self, inode: &INode, value: Vec<u8>) -> Result<()> {
-        let to_write = inode.get_blocks_to_write_to(size_of::<INode>() as u32)?;
+    pub fn append_to_inode_contents(&self, inode: &INode, to_append: Vec<u8>) -> Result<()> {
+        let to_write = inode.get_blocks_to_write_to(to_append.len() as u32)?;
+        debug!(
+            "append_to_inode_contents: to_write:'{to_write:?}', bytes_to_write{:?}",
+            to_append.len()
+        );
         let mut bytes_already_written = 0;
         for block_operation in to_write {
-            let value = &value[bytes_already_written..block_operation.bytes_count as usize];
+            let value = &to_append[bytes_already_written..block_operation.bytes_count as usize];
             bytes_already_written += block_operation.bytes_count as usize;
 
             let mut block = self.read_extent(Extent::single(block_operation.block_index))?;
@@ -286,10 +301,9 @@ impl Disk {
         &self,
         inode: &mut INode,
         inode_index: u32,
-        value: Vec<u8>,
+        to_append: Vec<u8>,
     ) -> Result<()> {
-        let free_bytes = inode.size - inode.allocated_bytes() as u32;
-        if (free_bytes as usize) < size_of::<INode>() {
+        while inode.allocated_bytes() - inode.size < to_append.len() as u32 {
             let alloc = self.allocate_extent(1)?;
             for i in 0..inode.extents.len() {
                 if inode.extents[i].base_block_index == 0 {
@@ -298,10 +312,9 @@ impl Disk {
                 }
             }
         }
-        inode.size += size_of::<INode>() as u32;
+        inode.size += to_append.len() as u32;
         self.write_inode(inode_index, inode)?;
-
-        self.append_to_inode_contents(inode, value)
+        self.append_to_inode_contents(inode, to_append)
     }
 
     pub fn add_entry_at_root(
@@ -456,7 +469,7 @@ impl GroupDescriptor {
 }
 
 #[repr(C)]
-#[derive(Pod, Zeroable, Clone, Copy)]
+#[derive(Pod, Zeroable, Clone, Debug, PartialEq, Copy)]
 pub struct INode {
     mode: u16,  // File type + permissions
     links: u16, // Link count - how many other nodes reference this node
@@ -517,7 +530,7 @@ impl INode {
     }
 }
 
-pub fn init_file_system(metadata: SuperBlock, mut internal_file: File) -> Result<()> {
+pub fn init_file_system(metadata: SuperBlock, internal_file: &mut File) -> Result<()> {
     let fs_info = FsInfo::new(&metadata);
     // Allocate enough space
     {
@@ -536,7 +549,6 @@ pub fn init_file_system(metadata: SuperBlock, mut internal_file: File) -> Result
     internal_file.rewind()?;
     // Super Block
     internal_file.write_all(&(0x00325246_u32.to_le_bytes()))?; // magic
-    internal_file.write_all(&metadata.total_blocks.to_le_bytes())?;
     internal_file.write_all(&metadata.total_blocks.to_le_bytes())?;
     internal_file.write_all(&metadata.total_inodes.to_le_bytes())?;
     internal_file.write_all(&metadata.blocks_per_group.to_le_bytes())?;
@@ -584,6 +596,7 @@ impl DirEntry {
         output
     }
 }
+#[derive(Debug)]
 pub struct BlockOperation {
     pub block_index: u32,
     pub base_block_local_address: u32,
