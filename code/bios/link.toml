@@ -1,0 +1,7 @@
+entry_point_label = "start"
+
+files_to_link = [
+    "main",
+    "../libs/print",
+    "../libs/disk",
+]

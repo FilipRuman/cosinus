@@ -12,3 +12,4 @@ anyhow = "1.0.102"
 tokio = { version = "1.47.1", features = ["full"] }
 minifb = "0.28.0"
 bytemuck = {version= "1.25.0", features = ["derive"]}
+bitflags = "2.11.1"

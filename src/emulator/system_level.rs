@@ -30,6 +30,7 @@ impl Thread {
         self.trigger_interrupt(InterruptType::Syscall);
     }
     pub fn sret(&mut self) {
+        self.write_psr_bit(PsrBitMask::EnableInterrupts, true);
         self.write_psr_bit(PsrBitMask::KernelPrivelage, false);
         self.pc = self.epc;
     }

@@ -1,8 +1,11 @@
 use std::sync::LazyLock;
 
 use crate::emulator::{interrupts::ExceptionType, psr::PsrBitMask, thread::Thread};
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, trace, warn};
 pub static MEMORY: LazyLock<Memory> = LazyLock::new(|| Memory::new());
+
+// This implementation uses unsafe operations because I don't want any atomic operations hide logic
+// bugs in code running on the emulator.
 pub struct Memory {
     ptr: *mut i8,
     vec: Vec<i8>,

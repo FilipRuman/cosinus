@@ -63,20 +63,26 @@ impl Thread {
         println!("RUN");
         self.gpr[0] = 0;
         loop {
-            let addr = self.pc as u32;
-            let instruction = unsafe { MEMORY.read(addr) };
+            self.run_current_instruction();
+            // If there are multiple interrupts stacked at the same time, they should be executed
+            // one after another without running the 'normal:non-interrupt' code in the middle. This
+            // is because the last instruction of an interrupt function(sret) will enable interrupts
+            // and another interrupt may be instantly executed.
             if self.should_trigger_an_interrupt() {
+                self.write_psr_bit(PsrBitMask::EnableInterrupts, false);
+                self.write_psr_bit(PsrBitMask::HALT, false);
+                // WARN: This will not execute all instructions of an interrupt function.
+                // It will only jump to the right address and set all CPU registers in the right way.
+                // Interrupt code will run this loop in the normal way.
                 self.handle_interrupt();
-            } else if instruction == 0 {
-                // temp
+            }
+            while self.read_psr_bit(PsrBitMask::HALT) && !self.should_trigger_an_interrupt() {
+                sleep(Duration::from_micros(20)).await;
+            }
+
+            if unsafe { MEMORY.read(self.pc as u32) } == 0 {
+                // TEMP:
                 panic!("Hit an zero instruction in a test code!");
-            } else if self.read_psr_bit(PsrBitMask::HALT) {
-                // quick and dirty, but works
-                while self.read_psr_bit(PsrBitMask::HALT) && !self.should_trigger_an_interrupt() {
-                    sleep(Duration::from_micros(20)).await;
-                }
-            } else {
-                self.run_current_instruction();
             }
         }
     }

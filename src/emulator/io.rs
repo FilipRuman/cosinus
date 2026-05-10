@@ -39,7 +39,5 @@ impl Thread {
         };
         Ok(())
     }
-    fn handle_disk_write(&self, relative_addr: u32, value: u32) -> Result<()> {
-        todo!("disk is not yet implemented");
-    }
+    fn handle_disk_write(&self, relative_addr: u32, value: u32) -> Result<()> {}
 }

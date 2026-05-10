@@ -1,58 +1,33 @@
 #[cfg(test)]
 pub mod test {
-    use std::{
-        fs::{File, OpenOptions},
-        io::Write,
-        sync::LazyLock,
-    };
+    use std::sync::LazyLock;
 
-    use crate::{
-        dir_handling::project_dir,
-        emulator::disk::{self, DISK, GroupDescriptor, SuperBlock},
+    use crate::emulator::disk::{
+        self, DISK, SuperBlock,
+        helpers::DiskReader,
+        mode::{EntryType, Mode, Permissions},
     };
     use anyhow::{Ok, Result};
-    const GROUP_COUNT: u32 = 2048;
+    use log::debug;
     fn super_block() -> SuperBlock {
-        let group_descriptor_table_blocks =
-            (size_of::<GroupDescriptor>() as u32 * GROUP_COUNT).div_ceil(disk::BLOCK_SIZE_BYTES);
-
         SuperBlock {
-            total_blocks: 2048 * 8 * 3000 + 1 + group_descriptor_table_blocks,
             total_inodes: 122880,
-            blocks_per_group: 8 * 3000,
+            data_blocks_per_group: 8 * 3000,
             inodes_per_group: 60,
-            group_count: GROUP_COUNT,
+
+            group_count: 2048,
             inode_size: size_of::<disk::INode>() as u32,
-            root_inode: 0,
-            first_data_block: 1 + group_descriptor_table_blocks,
             flags: 0,
         }
     }
-    fn get_file() -> File {
-        let path = project_dir(disk::INTERNAL_FILE_PATH);
-        OpenOptions::new()
-            .write(true)
-            .read(true)
-            .create(true) // if the file may not exist
-            .open(path)
-            .expect("internal file path for disk is invalid!")
-    }
 
     fn init() -> Result<()> {
-        let file = &mut {
-            let path = project_dir(disk::INTERNAL_FILE_PATH);
-            OpenOptions::new()
-                .write(true)
-                .truncate(true)
-                .read(true)
-                .create(true) // if the file may not exist
-                .open(path)
-                .expect("internal file path for disk is invalid!")
-        };
-        disk::init_file_system(super_block(), file)?;
-        assert_eq!(super_block(), SuperBlock::parse_from_internal_file(file)?);
+        disk::init_file_system(super_block())?;
+        assert_eq!(
+            super_block(),
+            SuperBlock::parse_from_internal_file(&DISK.internal_file)?
+        );
 
-        file.flush()?;
         Ok(())
     }
     fn super_block_parse() -> Result<()> {
@@ -62,24 +37,85 @@ pub mod test {
         );
         Ok(())
     }
-    const ENTRY_CONTENTS: LazyLock<Vec<u8>> = LazyLock::new(|| {
-        vec![
-            25, 210, 21, 52, 79, 25, 88, 076, 251, 02, 32, 21, 092, 252, 21, 76,
-        ]
-    });
-    const ENTRY_NAME: &'static str = "test name";
-    fn add_entry() -> Result<()> {
-        DISK.add_entry_at_root(ENTRY_NAME, 0, 0, 0, 0, ENTRY_CONTENTS.to_vec())?;
+    fn test_add_root_file() -> Result<()> {
+        const ENTRY_CONTENTS: LazyLock<Vec<u8>> = LazyLock::new(|| {
+            vec![
+                25, 210, 21, 52, 79, 25, 88, 076, 251, 02, 32, 21, 092, 252, 21, 76,
+            ]
+        });
+        const ENTRY_NAME: &'static str = "test name";
+        DISK.add_entry_at_root(ENTRY_NAME, 0, 0, 0, 0, &ENTRY_CONTENTS.to_vec())?;
+
+        let entries = DISK.list_entries_under_root()?;
+        debug!("entries: {entries:?}");
+
+        assert_eq!(entries.len(), 1);
+        let name_bytes: Vec<u8> = ENTRY_NAME.bytes().collect();
+        assert_eq!(entries[0].name, name_bytes);
+        let inode = DISK.read_inode(entries[0].inode)?;
+        assert_eq!(
+            DiskReader::read_inode_contents(&inode)
+                .take(ENTRY_CONTENTS.len())
+                .collect::<Vec<u8>>(),
+            ENTRY_CONTENTS.to_vec()
+        );
+
         Ok(())
     }
-    fn test_entry() -> Result<()> {
+    fn test_many_files() -> Result<()> {
+        let contents = vec![21u8; 1 << 8];
+
+        let mode = Mode {
+            entry_type: EntryType::File,
+            user: Permissions::READ | Permissions::WRITE | Permissions::EXECUTE, // Random permission
+            other: Permissions::READ | Permissions::WRITE | Permissions::EXECUTE,
+            group: Permissions::READ | Permissions::WRITE | Permissions::EXECUTE,
+        };
+
+        for i in 0..1 << 12 {
+            let name = i.to_string();
+            DISK.add_entry_at_root(&name, mode.into(), 0, 0, 0, &contents)?;
+        }
         Ok(())
     }
+    fn test_big_file() -> Result<()> {
+        let contents = vec![21u8; 1 << 12];
+
+        let mode = Mode {
+            entry_type: EntryType::File,
+            user: Permissions::READ | Permissions::WRITE | Permissions::EXECUTE, // Random permission
+            other: Permissions::READ | Permissions::WRITE | Permissions::EXECUTE,
+            group: Permissions::READ | Permissions::WRITE | Permissions::EXECUTE,
+        };
+
+        let name = "BIG file";
+        DISK.add_entry_at_root(&name, mode.into(), 0, 0, 0, &contents)?;
+        Ok(())
+    }
+    fn test_inode_mode() -> Result<()> {
+        let mode = Mode {
+            entry_type: EntryType::Directory,
+            user: Permissions::READ | Permissions::WRITE | Permissions::EXECUTE, // Random permission
+            other: Permissions::READ | Permissions::WRITE | Permissions::EXECUTE,
+            group: Permissions::READ | Permissions::WRITE | Permissions::EXECUTE,
+        };
+
+        assert_eq!(mode.entry_type, EntryType::Directory);
+        let num: u16 = mode.into();
+        assert_eq!(num, 16895);
+        let mode_from_num: Mode = num.try_into()?;
+
+        assert_eq!(mode, mode_from_num);
+        Ok(())
+    }
+    #[test]
     pub fn test_all() -> Result<()> {
+        test_inode_mode()?;
         init()?;
         super_block_parse()?;
-        add_entry()?;
-        test_entry()?;
+        test_add_root_file()?;
+        test_big_file()?;
+        test_many_files()?;
         Ok(())
     }
 }

@@ -18,6 +18,8 @@ impl Thread {
         (self.psr & bit as i32) != 0
     }
     pub fn halt(&mut self) {
-        self.write_psr_bit(PsrBitMask::HALT, true);
+        if !self.should_trigger_an_interrupt() {
+            self.write_psr_bit(PsrBitMask::HALT, true);
+        }
     }
 }

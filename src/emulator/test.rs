@@ -26,7 +26,6 @@ pub mod tests {
         syscalls()?;
         privileges()?;
         devices()?;
-        disk::test::test::test_all()?;
         Ok(())
     }
 

@@ -4,6 +4,8 @@ use crate::emulator::thread::Thread;
 
 pub static ATOMIC_LOCKS: LazyLock<AtomicLocks> = LazyLock::new(|| AtomicLocks::new());
 
+// This implementation uses unsafe operations because I don't want any atomic operations hide logic
+// bugs in code running on the emulator.
 #[derive(Clone, Copy)]
 pub struct Lock {
     pub valid: bool,

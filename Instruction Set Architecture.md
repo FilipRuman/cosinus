@@ -79,7 +79,7 @@ the privelage mode-> look at the instruction set
 
 ### PSR- Processor Status Register
 
-1. PM — Privilege Mode (1 bit)
+1. PM — Privilege Mode (0 bit)
 
 - PM = 0 → user mode
 - PM = 1 → kernel mode
@@ -89,7 +89,7 @@ Used for:
 - Simple kernel memory protection
 - Privileged instruction checks (SYSW, SRET, etc.)
 
-2. IE — Interrupt Enable (2 bit)
+2. IE — Interrupt Enable (1 bit)
 
 - IE = 1 → interrupts enabled
 - IE = 0 → interrupts disabled
@@ -98,7 +98,7 @@ Used by CPU:
 
 if (IE == 1) and (IPR & ~IMR != 0) → take interrupt
 
-3. HALT -> Makes thread sleep until the next interrupt (3 bit)
+3. HALT -> Makes thread sleep until the next interrupt (3 bit).
 
 - HALT= 1 → HALT enabled
 - HALT= 0 → HALT disabled
@@ -152,6 +152,36 @@ Notes:
 - All arithmetic operations will wrapp values-> over/under-flows will not cause
   exceptions
 - Division by zero returns 0 without throwing any exceptions
+
+### Example Instruction Execution Loop
+
+```rust
+loop {
+        self.run_current_instruction();
+        // If there are multiple interrupts stacked at the same time, they should be executed
+        // one after another without running the 'normal:non-interrupt' code in the middle. This
+        // is because the last instruction of an interrupt function(sret) will enable interrupts
+        // and another interrupt may be instantly executed.
+        if self.should_trigger_an_interrupt() {
+            self.write_psr_bit(PsrBitMask::EnableInterrupts, false);
+            self.write_psr_bit(PsrBitMask::HALT, false);
+            // WARN: This will not execute all instructions of an interrupt function.
+            // It will only jump to the right address and set all CPU registers in the right way.
+            // Interrupt code will run this loop in the normal way.
+            self.handle_interrupt();
+        }
+        while self.read_psr_bit(PsrBitMask::HALT) && !self.should_trigger_an_interrupt() {
+            sleep(Duration::from_micros(20)).await;
+        }
+}
+```
+
+### Halt Instruction Behavior
+
+Gets treated as a NOP if there was an interrupt in this cycle, this avoids some
+nasty race conditions.
+
+Sets the HALT psr bit witch makes a core sleep until the next interrupt.
 
 ### Boolean Operations Rules
 
@@ -249,10 +279,10 @@ Notes:
 
 ### System Calls
 
-| Mode | Opcode | Hex  | Inputs | Meaning |
-| :--: | :----: | :--: | :----- | :------ |
-|  U   | SCALL  | 0x29 | —      | syscall |
-|  K   |  SRET  | 0x2A | —      | return  |
+| Mode | Opcode | Hex  | Inputs | Meaning                                                |
+| :--: | :----: | :--: | :----- | :----------------------------------------------------- |
+|  U   | SCALL  | 0x29 | —      | syscall                                                |
+|  K   |  SRET  | 0x2A | —      | return + change privileges to user + enable interrupts |
 
 ---
 
@@ -263,8 +293,9 @@ Notes:
 |  U   |  SYSR  | 0x2B | rd, imm16  | read sysreg  |
 |  K   |  SYSW  | 0x2C | rs1, imm16 | write sysreg |
 
-Sysregs: 0. PSR
+Sysregs:
 
+0. PSR
 1. IVT
 2. IMR
 3. EPC
@@ -284,10 +315,10 @@ Sysregs: 0. PSR
 
 ### Misc
 
-| Mode | Opcode | Hex  | Inputs | Meaning  |
-| :--: | :----: | :--: | :----- | :------- |
-|  U   |  NOP   | 0x2F | —      | no-op    |
-|  U   |  HALT  | 0x30 | —      | stop CPU |
+| Mode | Opcode | Hex  | Inputs | Meaning                               |
+| :--: | :----: | :--: | :----- | :------------------------------------ |
+|  U   |  NOP   | 0x2F | —      | no-op                                 |
+|  U   |  HALT  | 0x30 | —      | stop thread untill the next interrupt |
 
 ---
 
