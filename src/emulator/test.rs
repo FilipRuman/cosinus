@@ -8,7 +8,7 @@ pub mod tests {
             self,
             instruction::{Immediate, Instruction, Macro},
         },
-        emulator::{self, disk, interrupts::InterruptType, memory::MEMORY, thread::Thread},
+        emulator::{self, core::Core, disk, interrupts::InterruptType, memory::MEMORY},
         log::init_log,
     };
 
@@ -201,8 +201,8 @@ halt
         const SYSCALL_FUNC_ADDR: u32 = 0xF0000001u32;
         const IVT_ADDR: u32 = 0xF0100000u32;
         const IVT_SYSCALL_ADDR: u32 = IVT_ADDR + InterruptType::Syscall as u32 * 4;
-        unsafe { MEMORY.write(IVT_SYSCALL_ADDR, SYSCALL_FUNC_ADDR as i32) };
-        unsafe { MEMORY.write(IVT_SYSCALL_ADDR, SYSCALL_FUNC_ADDR as i32) };
+        unsafe { MEMORY.write_bytes(IVT_SYSCALL_ADDR, SYSCALL_FUNC_ADDR as i32) };
+        unsafe { MEMORY.write_bytes(IVT_SYSCALL_ADDR, SYSCALL_FUNC_ADDR as i32) };
         let syscall_instructions = assembler::assemble_from_string(
             "
 add r5 r0 10
@@ -225,7 +225,7 @@ halt
         unsafe {
             emulator::write_instructions_to_memory(0, instructions);
         }
-        let mut thread = Thread::new(0, None);
+        let mut thread = Core::new(0, None);
         thread.psr = 0b11;
         thread.ivt = IVT_ADDR as i32;
         thread.run_test_loop();
@@ -281,8 +281,8 @@ halt
         const IVT_ADDR: u32 = 0xF0100000u32;
         const IVT_SYSCALL_ADDR: u32 = IVT_ADDR + InterruptType::Syscall as u32 * 4;
         const IVT_EXCEPTION_ADDR: u32 = IVT_ADDR + InterruptType::Exception as u32 * 4;
-        unsafe { MEMORY.write(IVT_SYSCALL_ADDR, SYSCALL_FUNC_ADDR as i32) };
-        unsafe { MEMORY.write(IVT_EXCEPTION_ADDR, EXCEPTION_FUNC_ADDR as i32) };
+        unsafe { MEMORY.write_bytes(IVT_SYSCALL_ADDR, SYSCALL_FUNC_ADDR as i32) };
+        unsafe { MEMORY.write_bytes(IVT_EXCEPTION_ADDR, EXCEPTION_FUNC_ADDR as i32) };
         {
             let syscall_instructions = assembler::assemble_from_string(
                 "
@@ -331,7 +331,7 @@ halt
         unsafe {
             emulator::write_instructions_to_memory(0, instructions);
         }
-        let mut thread = Thread::new(0, None);
+        let mut thread = Core::new(0, None);
         thread.psr = 0b11;
         thread.ivt = IVT_ADDR as i32;
         thread.run_test_loop();

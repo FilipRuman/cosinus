@@ -1,4 +1,4 @@
-use crate::emulator::thread::Thread;
+use crate::emulator::core::Core;
 
 #[repr(i32)]
 pub enum PsrBitMask {
@@ -6,7 +6,7 @@ pub enum PsrBitMask {
     EnableInterrupts = 1 << 1,
     HALT = 1 << 2,
 }
-impl Thread {
+impl Core {
     pub fn write_psr_bit(&mut self, bit: PsrBitMask, val: bool) {
         if val {
             self.psr |= bit as i32;

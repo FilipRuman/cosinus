@@ -1,10 +1,10 @@
 use crate::emulator::{
+    core::Core,
     interrupts::{ExceptionType, InterruptType},
     psr::PsrBitMask,
-    thread::Thread,
 };
 
-impl Thread {
+impl Core {
     pub fn sysw(&mut self, rd: u8, imm: i16) {
         if !self.read_psr_bit(PsrBitMask::KernelPrivelage) {
             self.trigger_exception(ExceptionType::InsufficientPrivelages);

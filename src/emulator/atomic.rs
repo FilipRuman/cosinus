@@ -1,6 +1,6 @@
 use std::{cell::UnsafeCell, collections::HashMap, sync::LazyLock};
 
-use crate::emulator::thread::Thread;
+use crate::emulator::core::Core;
 
 pub static ATOMIC_LOCKS: LazyLock<AtomicLocks> = LazyLock::new(|| AtomicLocks::new());
 
@@ -73,7 +73,7 @@ impl AtomicLocks {
         }
     }
 }
-impl Thread {
+impl Core {
     pub fn lr(&mut self, rd: u8, rs1: u8) {
         self.load(rd, rs1, 0);
         ATOMIC_LOCKS.lr(self.tid, self.reg(rs1));

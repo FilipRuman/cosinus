@@ -1,7 +1,5 @@
-use log::debug;
-
-use crate::emulator::thread::Thread;
-impl Thread {
+use crate::emulator::core::Core;
+impl Core {
     /// rd = (rs1 < rs2) signed
     pub fn ltr(&mut self, rd: u8, rs1: u8, rs2: u8) {
         self.gpr[rd as usize] = (self.gpr[rs1 as usize] < self.gpr[rs2 as usize]) as i32;

@@ -1,8 +1,8 @@
-use crate::emulator::thread::Thread;
+use crate::emulator::core::Core;
 use anyhow::{Result, bail};
 use log::{debug, info};
 const DEVICE_ID_MASK: u32 = 0xFF00000;
-impl Thread {
+impl Core {
     pub fn handle_io_write(&mut self, relative_addr: u32, value: u32) -> Result<()> {
         debug!("handle_io_write relative_addr{relative_addr:#x}");
         let id = (relative_addr & DEVICE_ID_MASK) >> 20;

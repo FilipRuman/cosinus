@@ -1,12 +1,12 @@
 use log::{debug, error, info, trace};
 
-use crate::emulator::{interrupts::ExceptionType, memory::MEMORY, thread::Thread};
+use crate::emulator::{core::Core, interrupts::ExceptionType, memory::MEMORY};
 
 const OPTCODE_MASK: i32 = ((1u32 << 6) - 1) as i32; // 6 bits
 const R_MASK: u8 = ((1u32 << 5) - 1) as u8; // 5 bits
 const IMM16_MASK: i16 = ((1u32 << 16) - 1) as i16; // 16 bits
 const IMM26_MASK: i32 = ((1u32 << 26) - 1) as i32; // 26 bits
-impl Thread {
+impl Core {
     pub fn run_current_instruction(&mut self) {
         let addr = self.pc as u32;
         let instruction = unsafe { MEMORY.read(addr) };

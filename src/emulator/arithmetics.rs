@@ -1,8 +1,8 @@
 use log::debug;
 
-use crate::emulator::thread::Thread;
+use crate::emulator::core::Core;
 
-impl Thread {
+impl Core {
     // REGISTER-REGISTER OPS
 
     pub fn addr(&mut self, rd: u8, rs1: u8, rs2: u8) {

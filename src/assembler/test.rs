@@ -5,7 +5,7 @@ mod test {
             self,
             instruction::{Immediate, Instruction},
         },
-        emulator::thread::Thread,
+        emulator::thread::Core,
     };
     use anyhow::Result;
     use log::info;
@@ -33,7 +33,7 @@ mod test {
                 manual_or_instr,
                 (0x0E << 26) as i32
             );
-            Thread::test_parse_instruction(manual_or_instr as i32);
+            Core::test_parse_instruction(manual_or_instr as i32);
         }
 
         {
@@ -43,7 +43,7 @@ mod test {
             info!("MANUAL:{manual_halt_instr:032b}, asm_halt_instr:{asm_halt_instr:032b}");
             assert_eq!(asm_halt_instr, manual_halt_instr as i32);
 
-            Thread::test_parse_instruction(asm_halt_instr as i32);
+            Core::test_parse_instruction(asm_halt_instr as i32);
         }
         Ok(())
     }

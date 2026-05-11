@@ -1,6 +1,6 @@
-use crate::emulator::thread::Thread;
+use crate::emulator::core::Core;
 
-impl Thread {
+impl Core {
     pub fn beq(&mut self, rs1: u8, rs2: u8, imm: i16) {
         if self.reg(rs1) == self.reg(rs2) {
             self.jmp(imm as i32);

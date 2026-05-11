@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use crate::emulator::{interrupts::ExceptionType, psr::PsrBitMask, thread::Thread};
+use crate::emulator::{core::Core, interrupts::ExceptionType, psr::PsrBitMask};
 use log::{debug, error, trace, warn};
 pub static MEMORY: LazyLock<Memory> = LazyLock::new(|| Memory::new());
 
@@ -46,7 +46,7 @@ impl Memory {
     }
 
     #[inline]
-    pub unsafe fn read16(&self, addr: u32) -> i16 {
+    pub unsafe fn write<T>(&self, addr: u32, value: T) {
         let addr = addr as u32 as usize;
         if addr > MEMORY_SIZE {
             panic!(
@@ -54,53 +54,13 @@ impl Memory {
             )
         }
         unsafe {
-            let ptr = self.ptr.clone().add(addr) as *const i16;
-            ptr.read_unaligned()
-        }
-    }
-    #[inline]
-    pub unsafe fn write16(&self, addr: u32, value: i16) {
-        let addr = addr as u32 as usize;
-        if addr > MEMORY_SIZE {
-            panic!(
-                "Address was outside of the allocated memory: addr:'{addr:#x}' size:'{MEMORY_SIZE:#x}' "
-            )
-        }
-        unsafe {
-            let ptr = self.ptr.clone().add(addr) as *mut i16;
+            let ptr = self.ptr.clone().add(addr) as *mut T;
             ptr.write_unaligned(value);
         }
     }
 
     #[inline]
-    pub unsafe fn read8(&self, addr: u32) -> i8 {
-        let addr = addr as u32 as usize;
-        if addr > MEMORY_SIZE {
-            panic!(
-                "Address was outside of the allocated memory: addr:'{addr:#x}' size:'{MEMORY_SIZE:#x}' "
-            )
-        }
-        unsafe {
-            let ptr = self.ptr.clone().add(addr) as *const i8;
-            ptr.read_unaligned()
-        }
-    }
-    #[inline]
-    pub unsafe fn write8(&self, addr: u32, value: i8) {
-        let addr = addr as u32 as usize;
-        if addr > MEMORY_SIZE {
-            panic!(
-                "Address was outside of the allocated memory: addr:'{addr:#x}' size:'{MEMORY_SIZE:#x}' "
-            )
-        }
-        unsafe {
-            let ptr = self.ptr.clone().add(addr) as *mut i8;
-            ptr.write_unaligned(value);
-        }
-    }
-
-    #[inline]
-    pub unsafe fn read(&self, addr: u32) -> i32 {
+    pub unsafe fn read<T>(&self, addr: u32) -> T {
         let addr = addr as u32 as usize;
         if addr > MEMORY_SIZE {
             panic!(
@@ -109,27 +69,14 @@ impl Memory {
         }
         trace!("read: {addr}");
         unsafe {
-            let ptr = self.ptr.clone().add(addr) as *const i32;
+            let ptr = self.ptr.clone().add(addr) as *const T;
             trace!("ptr: {ptr:?}");
             ptr.read_unaligned()
         }
     }
-    #[inline]
-    pub unsafe fn write(&self, addr: u32, value: i32) {
-        let addr = addr as u32 as usize;
-        if addr > MEMORY_SIZE {
-            panic!(
-                "Address was outside of the allocated memory: addr:'{addr:#x}' size:'{MEMORY_SIZE:#x}' "
-            )
-        }
-        unsafe {
-            let ptr = self.ptr.clone().add(addr) as *mut i32;
-            ptr.write_unaligned(value);
-        }
-    }
 }
 
-impl Thread {
+impl Core {
     pub fn handle_memory_load(&mut self, addr: i32) -> Option<i32> {
         let addr = addr as u32;
         if addr < 0xD0000000u32 {
@@ -197,7 +144,7 @@ impl Thread {
         let value = self.gpr[rs2 as usize];
         self.handle_memory_store(addr, value, || unsafe {
             warn!("Closure hit!");
-            MEMORY.write(addr as u32, value);
+            MEMORY.write_bytes(addr as u32, value);
         });
     }
     pub fn loadb(&mut self, rd: u8, rs1: u8, imm: i16) {
@@ -212,7 +159,7 @@ impl Thread {
         let value = self.gpr[rs2 as usize] as i8;
 
         self.handle_memory_store(addr, value as i32, || unsafe {
-            MEMORY.write8(addr as u32, value);
+            MEMORY.write(addr as u32, value);
         });
     }
 

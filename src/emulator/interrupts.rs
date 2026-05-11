@@ -1,6 +1,6 @@
-use log::{debug, info, trace};
+use log::trace;
 
-use crate::emulator::{memory::MEMORY, psr::PsrBitMask, thread::Thread};
+use crate::emulator::{core::Core, memory::MEMORY, psr::PsrBitMask};
 #[repr(i32)]
 pub enum InterruptType {
     Exception,
@@ -18,7 +18,7 @@ pub enum ExceptionType {
     InterruptLogicError,
 }
 
-impl Thread {
+impl Core {
     fn set_pending_interrupt(&mut self, interrupt_bit: i32, val: bool) {
         let mask: i32 = 1i32 << interrupt_bit as i32;
 

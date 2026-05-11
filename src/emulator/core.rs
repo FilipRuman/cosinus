@@ -1,10 +1,25 @@
-use log::{debug, error, info, warn};
-use std::time::Duration;
-use tokio::time::{error, sleep};
+use log::info;
+use std::{cell::UnsafeCell, sync::LazyLock, time::Duration};
+use tokio::time::sleep;
 
 use crate::emulator::{fb::FramebufferHandle, memory::MEMORY, psr::PsrBitMask};
 
-pub struct Thread {
+pub const CORE_COUNT: usize = 1;
+pub static CORES: LazyLock<Cores> = LazyLock::new(|| todo!());
+unsafe impl Sync for Cores {}
+struct Cores {
+    threads: UnsafeCell<[Core; CORE_COUNT]>,
+}
+impl Cores {
+    pub fn new() -> Self {
+        let threads = UnsafeCell::new([Core::new(0, None); CORE_COUNT]);
+        Self { threads }
+    }
+    pub fn get(&self, thread_id: u8) -> &'static mut Core {
+        unsafe { &mut (*self.threads.get())[thread_id as usize] }
+    }
+}
+pub struct Core {
     pub id: u8,
     /// general purpose registers
     pub gpr: Vec<i32>,
@@ -29,7 +44,7 @@ pub struct Thread {
 }
 
 const GPR_COUNT: usize = 32;
-impl Thread {
+impl Core {
     pub fn new(id: u8, frame_buffer_handle: Option<FramebufferHandle>) -> Self {
         Self {
             id,
@@ -59,7 +74,7 @@ impl Thread {
         self.gpr[r as usize]
     }
 
-    pub async fn run_loop(mut self) {
+    pub async fn run_loop(&'static mut self) {
         println!("RUN");
         self.gpr[0] = 0;
         loop {
@@ -80,7 +95,7 @@ impl Thread {
                 sleep(Duration::from_micros(20)).await;
             }
 
-            if unsafe { MEMORY.read(self.pc as u32) } == 0 {
+            if unsafe { MEMORY.read::<u32>(self.pc as u32) } == 0 {
                 // TEMP:
                 panic!("Hit an zero instruction in a test code!");
             }
@@ -92,7 +107,7 @@ impl Thread {
         info!("RUN TEST LOOP!{} {}", self.psr, self.ivt);
         loop {
             let addr = self.pc as u32;
-            let instruction = unsafe { MEMORY.read(addr) };
+            let instruction: u32 = unsafe { MEMORY.read(addr) };
             if self.should_trigger_an_interrupt() {
                 self.handle_interrupt();
             } else if self.read_psr_bit(PsrBitMask::HALT) {
