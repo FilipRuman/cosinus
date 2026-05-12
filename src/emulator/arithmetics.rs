@@ -1,4 +1,4 @@
-use log::debug;
+use log::{debug, info};
 
 use crate::emulator::core::Core;
 
@@ -43,6 +43,12 @@ impl Core {
     }
 
     pub fn orr(&mut self, rd: u8, rs1: u8, rs2: u8) {
+        info!(
+            "Orr: rs1:{} | rs2:{} out:{}",
+            self.gpr[rs1 as usize],
+            self.gpr[rs2 as usize],
+            (self.gpr[rs1 as usize] as u32 | self.gpr[rs2 as usize] as u32) as i32
+        );
         self.gpr[rd as usize] =
             (self.gpr[rs1 as usize] as u32 | self.gpr[rs2 as usize] as u32) as i32;
     }

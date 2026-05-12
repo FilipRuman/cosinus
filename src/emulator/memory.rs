@@ -38,11 +38,43 @@ impl Memory {
             vec,
         }
     }
-    pub fn clear(&self) {
-        todo!()
-        // unsafe {
-        //     std::ptr::write_bytes(self.ptr as *mut i8, 0, self.data.len());
-        // }
+
+    #[inline]
+    pub unsafe fn write_vec<T>(&self, addr: u32, value: Vec<T>) {
+        let addr = addr as u32 as usize;
+        if addr > MEMORY_SIZE {
+            panic!(
+                "Address was outside of the allocated memory: addr:'{addr:#x}' size:'{MEMORY_SIZE:#x}' "
+            )
+        }
+        unsafe {
+            let ptr = self.ptr.clone().add(addr) as *mut T;
+            (value.as_ptr()).copy_to_nonoverlapping(ptr, value.len());
+        }
+    }
+
+    #[inline]
+    pub unsafe fn read_vec<T>(&self, addr: u32, amount: usize) -> Vec<T> {
+        let addr = addr as u32 as usize;
+        if addr > MEMORY_SIZE {
+            panic!(
+                "Address was outside of the allocated memory: addr:'{addr:#x}' size:'{MEMORY_SIZE:#x}' "
+            )
+        }
+
+        unsafe {
+            let mut vec = Vec::<T>::with_capacity(amount);
+
+            std::ptr::copy_nonoverlapping(
+                self.ptr.clone().add(addr) as *mut u8,
+                vec.as_mut_ptr() as *mut u8,
+                amount * std::mem::size_of::<T>(),
+            );
+
+            vec.set_len(amount);
+
+            vec
+        }
     }
 
     #[inline]
@@ -144,7 +176,7 @@ impl Core {
         let value = self.gpr[rs2 as usize];
         self.handle_memory_store(addr, value, || unsafe {
             warn!("Closure hit!");
-            MEMORY.write_bytes(addr as u32, value);
+            MEMORY.write(addr as u32, value);
         });
     }
     pub fn loadb(&mut self, rd: u8, rs1: u8, imm: i16) {
@@ -175,7 +207,7 @@ impl Core {
         let value = self.gpr[rs2 as usize] as i16;
 
         self.handle_memory_store(addr, value as i32, || unsafe {
-            MEMORY.write16(addr as u32, value);
+            MEMORY.write(addr as u32, value);
         });
     }
 

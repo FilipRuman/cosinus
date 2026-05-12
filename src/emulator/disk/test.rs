@@ -17,6 +17,8 @@ pub mod test {
 
             group_count: 2048,
             inode_size: size_of::<disk::INode>() as u32,
+            boot_code_block_base_index: 0,
+            boot_code_block_count: 0,
             flags: 0,
         }
     }

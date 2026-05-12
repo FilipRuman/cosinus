@@ -2,23 +2,13 @@ use log::info;
 use std::{cell::UnsafeCell, sync::LazyLock, time::Duration};
 use tokio::time::sleep;
 
-use crate::emulator::{fb::FramebufferHandle, memory::MEMORY, psr::PsrBitMask};
+use crate::emulator::{
+    disk::io_device::DiskHandle, fb::FramebufferHandle, memory::MEMORY, psr::PsrBitMask,
+};
 
 pub const CORE_COUNT: usize = 1;
-pub static CORES: LazyLock<Cores> = LazyLock::new(|| todo!());
-unsafe impl Sync for Cores {}
-struct Cores {
-    threads: UnsafeCell<[Core; CORE_COUNT]>,
-}
-impl Cores {
-    pub fn new() -> Self {
-        let threads = UnsafeCell::new([Core::new(0, None); CORE_COUNT]);
-        Self { threads }
-    }
-    pub fn get(&self, thread_id: u8) -> &'static mut Core {
-        unsafe { &mut (*self.threads.get())[thread_id as usize] }
-    }
-}
+pub static mut CORES: LazyLock<[Core; CORE_COUNT]> =
+    LazyLock::new(|| [Core::new(0, None, None); CORE_COUNT]);
 pub struct Core {
     pub id: u8,
     /// general purpose registers
@@ -40,13 +30,19 @@ pub struct Core {
     /// exception type register
     pub etr: i32,
     pub frame_buffer_handle: Option<FramebufferHandle>,
+    pub disk_handle: Option<DiskHandle>,
     pub serial_buffer: String,
 }
 
 const GPR_COUNT: usize = 32;
 impl Core {
-    pub fn new(id: u8, frame_buffer_handle: Option<FramebufferHandle>) -> Self {
+    pub fn new(
+        id: u8,
+        frame_buffer_handle: Option<FramebufferHandle>,
+        disk_handle: Option<DiskHandle>,
+    ) -> Self {
         Self {
+            disk_handle,
             id,
             gpr: vec![0i32; GPR_COUNT],
             pc: 0,
@@ -79,6 +75,10 @@ impl Core {
         self.gpr[0] = 0;
         loop {
             self.run_current_instruction();
+
+            while self.read_psr_bit(PsrBitMask::HALT) && !self.should_trigger_an_interrupt() {
+                sleep(Duration::from_micros(20)).await;
+            }
             // If there are multiple interrupts stacked at the same time, they should be executed
             // one after another without running the 'normal:non-interrupt' code in the middle. This
             // is because the last instruction of an interrupt function(sret) will enable interrupts
@@ -90,9 +90,6 @@ impl Core {
                 // It will only jump to the right address and set all CPU registers in the right way.
                 // Interrupt code will run this loop in the normal way.
                 self.handle_interrupt();
-            }
-            while self.read_psr_bit(PsrBitMask::HALT) && !self.should_trigger_an_interrupt() {
-                sleep(Duration::from_micros(20)).await;
             }
 
             if unsafe { MEMORY.read::<u32>(self.pc as u32) } == 0 {

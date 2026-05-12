@@ -5,13 +5,23 @@ mod test {
             self,
             instruction::{Immediate, Instruction},
         },
-        emulator::thread::Core,
+        emulator::core::Core,
     };
     use anyhow::Result;
-    use log::info;
+    use log::{error, info};
 
     #[test]
-    fn test_instruction_conversion_for_asembler() -> Result<()> {
+    fn test_constants() -> Result<()> {
+        crate::log::init_log();
+        error!(
+            "-->>test_constants: {}",
+            assembler::handle_evaluation_of_constant("a = \"Testcode\"; a",)?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_instruction_conversion_for_assembler() -> Result<()> {
         let r = |x: &u8| (*x as u32) & 0x1F;
         let imm16 = |x: u16| (x as u16 as u32) & 0xFFFF;
         let imm26 = |x: u32| (x as u32) & 0x03FF_FFFF;

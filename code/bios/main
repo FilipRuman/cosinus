@@ -1,3 +1,6 @@
+$"base_disk_addr = 0xE0000000"
+$"buffer_address = 0x6000"
+
 halt
 start:
 call print_hw
@@ -5,13 +8,8 @@ call print_hw
 apc r20 temp_interrupt_table 
 sysw r20 1 # set IVT adress 
 
-
-or r30 r0 0b10000# Mask all interrupts except the disk 
-sysw r20 2 # set IMR register
-        
-
 apc r21 temp_disk_interrupt  # Setup Disk Interrupts
-store r20 r21 4 # *(IVT + 4) = temp_disk_interrupt 
+store r20 r21 16 # *(IVT + 4 * 4) = temp_disk_interrupt 
 
 
 # Enable interrupts
@@ -20,12 +18,12 @@ sysw r30 0
 
 
 # Read First Block From Disk
-        set32 r12 0xE0000000 # base disk addr
+        set32 r12 $"base_disk_addr" # base disk addr
         
         or r31 r0 0 # base_block_index
         store r12 r31 0 
         
-        or r11 r0 0x6000 # buffer_address(idk. some random addr, this doesn't matter)
+        or r11 r0 $"buffer_address" # buffer_address(idk. some random addr, this doesn't matter)
         store r12 r11 0x04 
 
         or r31 r0 1 # block_count
@@ -38,20 +36,47 @@ sysw r30 0
         store r12 r31 0x14 
         halt # await for disk interrupt
 
-call print_hw # Should've seen HW 3 times in the console  
+# Enable back interrupts
+or r30 r0 0b11 # Kernel privelages + interrupts enabled
+sysw r30 0 
+
+# Acknowladge the Interrupt
+or r31 r0 0b01 # control: read, 1 command id
+store r12 r31 0x14 
+
+call print_hw   
+
+
+or r11 r0 $"buffer_address" # buffer_address(idk. some random addr, this doesn't matter)
+load r30 r11 0x00 # Magic Number 
+# TODO: change serial printing impl
+
+# TODO: check Magic Number
+# TODO: load Boot Code Blocks From Disk
+# TODO: jump To First Byte Of The Boot Code
+
 
 halt
 
-        
-
-# Check Magic Number
-# Load Boot Code Blocks From Disk
-# Jump To First Byte Of The Boot Code
 halt
-
 temp_disk_interrupt:
-call print_hw
+sysr r2 3 # load EPC to normal return register
+add r2 r2 -4
+ret # Normal return to carry the privelages
 ret # Normal return to carry the privelages
 
 
-temp_interrupt_table:
+temp_interrupt_table: 
+# Alloc some space for the temporary interrupt table
+halt
+halt
+halt
+halt
+halt
+halt
+halt
+halt
+halt
+halt
+halt
+halt

@@ -1,4 +1,4 @@
-use log::debug;
+use log::{debug, info};
 
 use crate::emulator::core::Core;
 
@@ -7,12 +7,17 @@ impl Core {
         self.pc += imm;
     }
     pub fn call(&mut self, imm: i32) {
-        debug!("call {imm}");
         self.gpr[Core::RA] = self.pc; // byte space address -> 4 bytes
+        info!(
+            "call, pc:'{}' imm:'{imm}', ra:'{}'",
+            self.pc,
+            self.gpr[Core::RA]
+        );
         self.pc = self.pc.wrapping_add(imm);
     }
 
     pub fn ret(&mut self) {
+        info!("ret- retrun addr:'{}'", self.gpr[Core::RA]);
         self.pc = self.gpr[Core::RA];
     }
 

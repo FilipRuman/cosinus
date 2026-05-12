@@ -3,6 +3,7 @@ mod parsing;
 use std::{collections::HashMap, fs::File, io::Read, path::PathBuf};
 
 use anyhow::{Context, Ok, Result, bail};
+use log::info;
 
 use crate::assembler::{
     self,
@@ -100,7 +101,7 @@ pub fn generate_elf(
     }
 
     let mut offsets_for_labels = HashMap::new();
-    for file in &parsed_files {
+    for file in &mut parsed_files {
         for label in &file.relative_offset_labels {
             let global_addr = file.base_address + label.1;
             offsets_for_labels.insert(label.0.to_string(), global_addr);
@@ -138,6 +139,7 @@ pub fn generate_elf(
 
         output.append(&mut assembled_code);
     }
+    info!("Linker: offsets_for_labels:'{offsets_for_labels:?}'");
 
     Ok(output)
 }

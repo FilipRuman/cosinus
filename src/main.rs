@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 
 use crate::{
     dir_handling::project_dir,
-    emulator::disk::{self, DISK, Extent, SuperBlock, helpers::DiskWriteStream},
+    emulator::disk::{self, DISK, Extent, helpers::DiskWriteStream, metadata::SuperBlock},
     log::init_log,
 };
 

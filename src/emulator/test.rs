@@ -34,11 +34,11 @@ pub mod tests {
             assembler::assemble_without_linker_data(vec![Instruction::HALT {}.into()])
                 .context("assembling the test instructions")?;
         let _ = emulator::run_test(instructions.clone());
-        let first_instruction = unsafe { emulator::memory::MEMORY.read(0) };
+        let first_instruction: i32 = unsafe { emulator::memory::MEMORY.read(0) };
 
         debug!(
             "first_instruction: {:#x}, asembled_instruction:{:#x}",
-            first_instruction as u32, instructions[0] as u32
+            first_instruction, instructions[0] as u32
         );
         assert_eq!(first_instruction, instructions[0]);
         Ok(())
@@ -105,17 +105,17 @@ halt
         )
         .context("assembling the test instructions")?;
         let thread = emulator::run_test(instructions.clone());
-        assert_eq!(unsafe { MEMORY.read(0xFFF) }, 25);
-        assert_eq!(unsafe { MEMORY.read(0x1FFF) }, 30);
-        assert_eq!(unsafe { MEMORY.read(0x2FFF) }, 0x2F);
-        assert_eq!(unsafe { MEMORY.read(0x3FFF) }, 0xFF2F);
-        assert_eq!(unsafe { MEMORY.read(0x4FFF) }, 0xCB2AFF2Fu32 as i32);
+        assert_eq!(unsafe { MEMORY.read::<u32>(0xFFF) }, 25);
+        assert_eq!(unsafe { MEMORY.read::<u32>(0x1FFF) }, 30);
+        assert_eq!(unsafe { MEMORY.read::<u32>(0x2FFF) }, 0x2F);
+        assert_eq!(unsafe { MEMORY.read::<u32>(0x3FFF) }, 0xFF2F);
+        assert_eq!(unsafe { MEMORY.read::<u32>(0x4FFF) }, 0xCB2AFF2Fu32);
         // load
         assert_eq!(thread.gpr[5], 0xCB2AFF2Fu32 as i32);
         assert_eq!(thread.gpr[6], 0x2F);
         assert_eq!(thread.gpr[7], 0xFF2Fu16 as i16 as i32);
         // privilege test
-        assert_eq!(unsafe { MEMORY.read(0xF0000001) }, 0 as i32);
+        assert_eq!(unsafe { MEMORY.read::<u32>(0xF0000001) }, 0);
 
         Ok(())
     }
@@ -201,10 +201,11 @@ halt
         const SYSCALL_FUNC_ADDR: u32 = 0xF0000001u32;
         const IVT_ADDR: u32 = 0xF0100000u32;
         const IVT_SYSCALL_ADDR: u32 = IVT_ADDR + InterruptType::Syscall as u32 * 4;
-        unsafe { MEMORY.write_bytes(IVT_SYSCALL_ADDR, SYSCALL_FUNC_ADDR as i32) };
-        unsafe { MEMORY.write_bytes(IVT_SYSCALL_ADDR, SYSCALL_FUNC_ADDR as i32) };
+        unsafe { MEMORY.write(IVT_SYSCALL_ADDR, SYSCALL_FUNC_ADDR as i32) };
+        unsafe { MEMORY.write(IVT_SYSCALL_ADDR, SYSCALL_FUNC_ADDR as i32) };
         let syscall_instructions = assembler::assemble_from_string(
             "
+halt # will not be run
 add r5 r0 10
 SYSR r6 0 # psr
 sret
@@ -225,7 +226,7 @@ halt
         unsafe {
             emulator::write_instructions_to_memory(0, instructions);
         }
-        let mut thread = Core::new(0, None);
+        let mut thread = Core::new(0, None, None);
         thread.psr = 0b11;
         thread.ivt = IVT_ADDR as i32;
         thread.run_test_loop();
@@ -281,11 +282,12 @@ halt
         const IVT_ADDR: u32 = 0xF0100000u32;
         const IVT_SYSCALL_ADDR: u32 = IVT_ADDR + InterruptType::Syscall as u32 * 4;
         const IVT_EXCEPTION_ADDR: u32 = IVT_ADDR + InterruptType::Exception as u32 * 4;
-        unsafe { MEMORY.write_bytes(IVT_SYSCALL_ADDR, SYSCALL_FUNC_ADDR as i32) };
-        unsafe { MEMORY.write_bytes(IVT_EXCEPTION_ADDR, EXCEPTION_FUNC_ADDR as i32) };
+        unsafe { MEMORY.write(IVT_SYSCALL_ADDR, SYSCALL_FUNC_ADDR as i32) };
+        unsafe { MEMORY.write(IVT_EXCEPTION_ADDR, EXCEPTION_FUNC_ADDR as i32) };
         {
             let syscall_instructions = assembler::assemble_from_string(
                 "
+halt # will not be run
 add r5 r0 10
 SYSR r6 0 # psr
 sret
@@ -303,6 +305,7 @@ sret
         {
             let exceptions_instructions = assembler::assemble_from_string(
                 "
+halt # will not be run
 add r8 r0 21
 sret
 ",
@@ -331,11 +334,11 @@ halt
         unsafe {
             emulator::write_instructions_to_memory(0, instructions);
         }
-        let mut thread = Core::new(0, None);
+        let mut thread = Core::new(0, None, None);
         thread.psr = 0b11;
         thread.ivt = IVT_ADDR as i32;
         thread.run_test_loop();
-        assert_eq!(unsafe { MEMORY.read(0xFFFF0001) }, 66);
+        assert_eq!(unsafe { MEMORY.read::<u32>(0xFFFF0001) }, 66);
         assert_eq!(thread.gpr[8], 21);
         assert_eq!(thread.gpr[5], 10);
 

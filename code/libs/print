@@ -1,12 +1,15 @@
+$"hello_world = \"Hello world!\\n\""
+$"error = \"error!\\n\""
+
 halt
 
 print_hw:
 
-apc r4 hellow_world
-add r5 r0 13 # text length
-add r11 r2 0 # save the return address
+apc r4 hello_world
+add r5 r0 $"len(hello_world)-1" # -1 for \n being 2 chars
+orr r14 r2 r0 # save the return address
 call print
-add r2 r11 0 # load back the return address
+orr r2 r14 r0 # load back the return address
 ret
 
 print: # r4:address r5:length
@@ -23,5 +26,7 @@ print: # r4:address r5:length
         bne r19 r0 print_loop_start # if printed the whole lenght return
             ret
 
-hellow_world:
-.datab  72 101 108 108 111 32 119 111 114 108 100 33 10 # 'Hello world!\\n' 13 bytes
+hello_world:
+.datac  $"hello_world"
+Error:
+.datac  $"error"

@@ -53,27 +53,31 @@ pub fn assemble_with_linker_data(
     base_address: u32,
     to_assemble: Vec<Command>,
 ) -> Result<Vec<i32>> {
-    let label_handle = |name: &str, immediate_size: u8| -> Result<i32> {
-        let global = global_addresses_for_labels
-            .get(name)
-            .with_context(|| format!("Label with a name:'{name}' doesn't exist"))?;
-        let offset = *global as i32 - base_address as i32;
-        debug!(
-            "assemble_with_linker_data.label_handle: name:'{name}' base_address:'{base_address}' global:'{global}' offset:'{offset}'"
-        );
-        if offset.abs() > 1 << immediate_size {
-            bail!(
-                "Value of the immediate- {offset} calculated during linking of labels was higher than it is possible to store in immediate of size 2^{immediate_size}"
+    let named_immediate_eval = |name: &str, immediate_size: u8, pc: u32| -> Result<i32> {
+        if let Some(label_adress) = global_addresses_for_labels.get(name) {
+            let offset = *label_adress as i64 - base_address as i64 - (pc * 4) as i64; // i64 to avoid
+            // any overflows
+            debug!(
+                "assemble_with_linker_data.label_handle: name:'{name}' base_address:'{base_address}' global:'{pc}' offset:'{offset}'"
             );
-        }
+            if offset.abs() > 1 << immediate_size - 1
+            /* -1: signed integer*/
+            {
+                bail!(
+                    "Value of the immediate- {offset} calculated during linking of labels was higher than it is possible to store in immediate of size 2^{immediate_size}"
+                );
+            }
 
-        Ok(offset)
+            Ok(offset as i32)
+        } else {
+            bail!("Name of immediate:'{name}' is invalid");
+        }
     };
-    assemble(to_assemble, label_handle)
+    assemble(to_assemble, named_immediate_eval)
 }
-fn assemble<F>(to_assemble: Vec<Command>, label_handle: F) -> Result<Vec<i32>>
+fn assemble<F>(to_assemble: Vec<Command>, named_immediate_eval: F) -> Result<Vec<i32>>
 where
-    F: Fn(&str, u8) -> Result<i32>,
+    F: Fn(&str, u8, u32) -> Result<i32>,
 {
     let mut output = Vec::with_capacity(to_assemble.len());
     let mut pc = 0;
@@ -81,9 +85,11 @@ where
         match value {
             Command::Instr(instruction) => {
                 output.push(
-                    instruction.encode(&label_handle, pc).with_context(|| {
-                        format!("instruction:'{instruction:?}', nr:'{instr_nr}'")
-                    })? as i32,
+                    instruction
+                        .encode(&named_immediate_eval, pc)
+                        .with_context(|| {
+                            format!("instruction:'{instruction:?}', nr:'{instr_nr}'")
+                        })? as i32,
                 );
                 pc += 1;
             }
@@ -92,9 +98,9 @@ where
                 let instructions: Result<Vec<Instruction>> = _macro.into();
 
                 for instruction in instructions? {
-                    output.push(instruction.encode(&label_handle, pc).with_context(|| {
-                        format!("instruction:'{instruction:?}', nr:'{instr_nr}'")
-                    })? as i32);
+                    output.push(instruction.encode(&named_immediate_eval, pc).with_context(
+                        || format!("instruction:'{instruction:?}', nr:'{instr_nr}'"),
+                    )? as i32);
                     pc += 1;
                 }
             }
@@ -108,19 +114,28 @@ where
     Ok(output)
 }
 pub fn assemble_without_linker_data(to_assemble: Vec<Command>) -> Result<Vec<i32>> {
-    let labels = get_data_for_linking(&to_assemble)?.declared_labels;
-    let label_handle = |name: &str, immediate_size: u8| -> Result<i32> {
-        let address = *labels
-            .get(name)
-            .with_context(|| format!("Label with a name:'{name}' doesn't exist"))?;
-        if address > 1 << immediate_size {
-            bail!(
-                "Value of the immediate- {address} calculated during linking of labels was higher than it is possible to store in immediate of size 2^{immediate_size}"
+    let linking_data = get_data_for_linking(&to_assemble)?;
+    let labels = linking_data.declared_labels;
+    let named_immediate_eval = |name: &str, immediate_size: u8, pc: u32| -> Result<i32> {
+        if let Some(label_adress) = labels.get(name) {
+            let offset = *label_adress as i64 - (pc * 4) as i64; // i64 to avoid
+            // any overflows
+            debug!(
+                "assemble_without_linker_data.label_handle: name:'{name}'  global:'{pc}' offset:'{offset}'"
             );
-        }
+            if offset.abs() > 1 << immediate_size - 1
+            /* -1: signed integer*/
+            {
+                bail!(
+                    "Value of the immediate- {offset} calculated during linking of labels was higher than it is possible to store in immediate of size 2^{immediate_size}"
+                );
+            }
 
-        Ok(address as i32)
+            Ok(offset as i32)
+        } else {
+            bail!("Name of immediate:'{name}' is invalid");
+        }
     };
 
-    assemble(to_assemble, label_handle)
+    assemble(to_assemble, named_immediate_eval)
 }

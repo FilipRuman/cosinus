@@ -191,7 +191,7 @@ impl Disk {
             base_block_index: 1,
             block_count: self.fs_info.group_descriptor_indoe_table_size,
         });
-        (&mut reader).skip(group_index as usize * size_of::<GroupDescriptor>());
+        let _ = (&mut reader).skip(group_index as usize * size_of::<GroupDescriptor>());
         let bytes: Vec<u8> = reader.take(size_of::<GroupDescriptor>()).collect();
         Ok(*GroupDescriptor::from_bytes_le(&bytes))
     }

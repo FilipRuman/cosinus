@@ -1,3 +1,4 @@
+use crate::disk::helpers::set_bit_in_block;
 use anyhow::Result;
 
 use crate::emulator::disk::*;

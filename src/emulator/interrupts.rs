@@ -1,4 +1,4 @@
-use log::trace;
+use log::{info, trace};
 
 use crate::emulator::{core::Core, memory::MEMORY, psr::PsrBitMask};
 #[repr(i32)]
@@ -51,15 +51,16 @@ impl Core {
         let masked_ipr = self.ipr & !self.imr;
         let interrupt_index = masked_ipr.trailing_zeros() as i32;
         let ivt_addr = self.ivt as u32 + interrupt_index as u32 * 4;
-        trace!(
-            "handle_interrupt! idx:'{interrupt_index}' ivt:{:#x} ivt_addr:{:#x}",
-            self.ivt, ivt_addr
-        );
         self.set_pending_interrupt(interrupt_index, false);
-        let adress = unsafe { MEMORY.read(ivt_addr) };
+        let adress = unsafe { MEMORY.read::<u32>(ivt_addr) } + 4;
+
+        info!(
+            "handle_interrupt! idx:'{interrupt_index}' ivt:{:#x} ivt_addr:{:#x}, new_pc:{adress}, pc:{}",
+            self.ivt, ivt_addr, self.pc
+        );
 
         self.epc = self.pc;
-        self.pc = adress;
+        self.pc = adress as i32;
         self.write_psr_bit(PsrBitMask::KernelPrivelage, true);
     }
 }

@@ -1,4 +1,4 @@
-use crate::emulator::core::Core;
+use crate::emulator::{core::Core, disk::io_device};
 use anyhow::{Result, bail};
 use log::{debug, info};
 const DEVICE_ID_MASK: u32 = 0xFF00000;
@@ -39,5 +39,14 @@ impl Core {
         };
         Ok(())
     }
-    fn handle_disk_write(&self, relative_addr: u32, value: u32) -> Result<()> {}
+    fn handle_disk_write(&self, relative_addr: u32, value: u32) -> Result<()> {
+        if let Some(disk_handle) = &self.disk_handle {
+            disk_handle.write(relative_addr, value)
+        } else {
+            bail!(
+                "There was no disk handle assigned to this core, id:'{}'",
+                self.id
+            );
+        }
+    }
 }

@@ -1,7 +1,3 @@
-use std::collections::VecDeque;
-
-use log::warn;
-
 use crate::emulator::disk::*;
 impl DiskReader {
     pub fn skip_bytes(&mut self, mut n: usize) {

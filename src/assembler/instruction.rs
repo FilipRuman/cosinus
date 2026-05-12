@@ -3,12 +3,12 @@ use std::collections::HashMap;
 use anyhow::{Context, Result, bail};
 use log::{debug, info};
 
-type Label = String;
+type Name = String;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Immediate<T> {
     Direct(T),
-    Label(Label),
+    Label(Name),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,7 +97,7 @@ impl Into<Result<Vec<Instruction>>> for &Macro {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     Instr(Instruction),
-    Label(Label),
+    Label(Name),
     Macro(Macro),
     RawData(Vec<i32>),
 }
@@ -479,9 +479,9 @@ impl Into<Command> for Instruction {
     }
 }
 impl Instruction {
-    pub fn encode<F>(&self, get_offset_for_label: &F, pc: u32) -> Result<i32>
+    pub fn encode<F>(&self, named_immediate_eval: &F, pc: u32) -> Result<i32>
     where
-        F: Fn(&str, u8) -> Result<i32>,
+        F: Fn(&str, u8, u32) -> Result<i32>,
     {
         let r = |x: &u8| (*x as i32) & 0x1F;
         let imm16 = |x: i16| (x as i16 as i32) & 0xFFFF;
@@ -491,13 +491,13 @@ impl Instruction {
             match imm {
                 Immediate::Direct(v) => Ok(*v),
                 Immediate::Label(name) => {
-                    const SIZE: u8 = 15;
-                    let target = get_offset_for_label(name, SIZE)?;
+                    const SIZE: u8 = 16;
+                    let target = named_immediate_eval(name, SIZE, pc)?;
                     debug!(
                         "Handle imm16 label: target:'{target}' pc:'{pc}' name:'{name}' out:'{}'",
-                        target as i16 - (pc * 4) as i16
+                        target as i16
                     );
-                    Ok(target as i16 - (pc * 4) as i16)
+                    Ok(target as i16)
                 }
             }
         };
@@ -506,13 +506,13 @@ impl Instruction {
             match imm {
                 Immediate::Direct(v) => Ok(*v),
                 Immediate::Label(name) => {
-                    const SIZE: u8 = 25;
-                    let target = get_offset_for_label(name, SIZE)?;
+                    const SIZE: u8 = 26;
+                    let target = named_immediate_eval(name, SIZE, pc)?;
                     debug!(
                         "Handle imm26 label: target:'{target}' pc:'{pc}' name:'{name}' out:'{}'",
-                        target - pc as i32 * 4
+                        target
                     );
-                    Ok(target - pc as i32 * 4)
+                    Ok(target)
                 }
             }
         };

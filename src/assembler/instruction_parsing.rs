@@ -1,7 +1,46 @@
 use crate::assembler::instruction::{Command, Immediate, Instruction, Macro};
 use anyhow::{Context, Result};
+use evalexpr::Value;
+use regex::Regex;
+pub fn eval_constants(input: &str) -> Result<String> {
+    // Matches: $"..."
+    let re = Regex::new(r#"\$\s*"((?:\\.|[^"\\])*)""#)?;
+    let mut output = String::new();
+    let mut last = 0;
+
+    let mut context = evalexpr::HashMapContext::<evalexpr::DefaultNumericTypes>::new();
+    for caps in re.captures_iter(input) {
+        let m = caps.get(0).unwrap();
+
+        // Unescape \" before evaluation
+        let expr = caps.get(1).unwrap().as_str().replace(r#"\""#, r#"""#);
+
+        output.push_str(&input[last..m.start()]);
+
+        let evaluated = evaluated_value_to_string(
+            evalexpr::eval_with_context_mut(&expr, &mut context).with_context(|| {
+                format!("evaluation of constant did not succeed, value:'{expr}'")
+            })?,
+        );
+
+        output.push_str(&evaluated);
+
+        last = m.end();
+    }
+    // Push remaining text
+    output.push_str(&input[last..]);
+
+    Ok(output)
+}
+pub fn evaluated_value_to_string(value: evalexpr::Value) -> String {
+    match value {
+        Value::Empty => String::new(),
+        other => other.to_string(),
+    }
+}
 
 pub fn parse_program(input: &str) -> Result<Vec<Command>> {
+    let input = eval_constants(input)?;
     let mut out = Vec::new();
 
     for (lineno, raw) in input.lines().enumerate() {
@@ -10,7 +49,6 @@ pub fn parse_program(input: &str) -> Result<Vec<Command>> {
             continue;
         }
 
-        // label
         if let Some(label) = line.strip_suffix(':') {
             out.push(Command::Label(label.trim().to_string()));
             continue;
@@ -34,6 +72,65 @@ pub fn parse_program(input: &str) -> Result<Vec<Command>> {
                 }
 
                 // missing bytes are implicitly 0 -> padding already handled
+                values.push(word as i32);
+            }
+
+            out.push(Command::RawData(values));
+            continue;
+        }
+        // raw byte data -> packed into u32 words
+        if let Some(rest) = line.strip_prefix(".datac") {
+            let rest = rest.trim();
+
+            // support either '...' or "..."
+            let content = if (rest.starts_with('"') && rest.ends_with('"'))
+                || (rest.starts_with('\'') && rest.ends_with('\''))
+            {
+                &rest[1..rest.len() - 1]
+            } else {
+                anyhow::bail!("line {}: invalid .datac string literal", lineno);
+            };
+
+            // unescape common escapes
+            let mut bytes = Vec::<u8>::new();
+            let mut chars = content.chars();
+
+            while let Some(c) = chars.next() {
+                if c == '\\' {
+                    let escaped = chars
+                        .next()
+                        .with_context(|| format!("line {}: incomplete escape", lineno))?;
+
+                    match escaped {
+                        'n' => bytes.push(b'\n'),
+                        'r' => bytes.push(b'\r'),
+                        't' => bytes.push(b'\t'),
+                        '\\' => bytes.push(b'\\'),
+                        '\'' => bytes.push(b'\''),
+                        '"' => bytes.push(b'"'),
+                        '0' => bytes.push(0),
+                        _ => anyhow::bail!(
+                            "line {}: unsupported escape sequence \\{}",
+                            lineno,
+                            escaped
+                        ),
+                    }
+                } else {
+                    let mut buf = [0u8; 4];
+                    let encoded = c.encode_utf8(&mut buf);
+                    bytes.extend_from_slice(encoded.as_bytes());
+                }
+            }
+
+            let mut values = Vec::with_capacity((bytes.len() + 3) / 4);
+
+            for chunk in bytes.chunks(4) {
+                let mut word: u32 = 0;
+
+                for (i, &b) in chunk.iter().enumerate() {
+                    word |= (b as u32) << (8 * i);
+                }
+
                 values.push(word as i32);
             }
 
