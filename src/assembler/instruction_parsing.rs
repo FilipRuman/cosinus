@@ -270,9 +270,16 @@ where
 }
 
 fn parse_op(line: &str) -> Result<Command> {
-    let mut parts = line.split_whitespace();
+    let mut brackets_split = line.split('(');
+    let mut parts = brackets_split
+        .next()
+        .context("there was no text in the parse")?
+        .split_whitespace();
     let op = parts.next().context("empty line")?.to_uppercase();
-    let args: Vec<&str> = parts.collect();
+    let mut args: Vec<&str> = parts.collect();
+    if let Some(immidiate_in_brackets) = brackets_split.next() {
+        args.push(immidiate_in_brackets);
+    }
 
     match op.as_str() {
         // macros

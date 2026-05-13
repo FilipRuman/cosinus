@@ -12,7 +12,7 @@ All ISA instructions are supported and parsed via the opcode dispatcher.
 
 ## LABELS
 
-Syntax: label: :label
+Syntax: label:
 
 Recommended canonical form: label:
 
@@ -30,9 +30,22 @@ Resolution:
 
 ---
 
+## CONSTANTS
+
+Syntax: $"constant to evaluate"
+
+Constants are indicated by the
+'$' symbol. Value inside of quotation marks right after the '$' will be
+evaluated using the [evalexpr](https://docs.rs/evalexpr/latest/evalexpr/] crate.
+Constants will be replaced as a string representation of it's evaluation, eg:
+`add r30 r0 $"a = 25; a"` == `add r30 r0 25`. Context is shared across all
+constants in a file
+
+---
+
 ## REGISTERS
 
-Syntax: r0 ... r31
+Syntax: r0 .. r31
 
 Rules:
 

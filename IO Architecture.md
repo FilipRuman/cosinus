@@ -8,10 +8,10 @@ Base: 0xE0300000 Interrupt ID: 3 (fixed)
 
 ### Registers
 
-- +0x00 OUT (write, 8-bit used)
-- +0x10 IN_DATA (read, 8-bit)
-- +0x14 STATUS (read)
-- +0x18 CONTROL (write)
+- +0x00 OUTPUT_BUFFER_ADDRESS (write)
+- +0x04 OUTPUT_BYTES_COUNT (write)
+- +0x08 STATUS (read)
+- +0x0C CONTROL (write)
 
 ---
 
@@ -23,7 +23,8 @@ bit 0 → IN_READY (1 = input available)
 
 ### CONTROL (Bitfield)
 
-bit 0 → ACK (write 1 to acknowledge input / clear interrupt)
+- bit 0 → ACK (write 1 to acknowledge input / clear interrupt)
+- bit 1 → Write output from the output buffer
 
 ---
 
@@ -31,7 +32,8 @@ bit 0 → ACK (write 1 to acknowledge input / clear interrupt)
 
 Output:
 
-- writing to OUT prints a single byte to stdout
+1. Set the output buffer address and bytes count registers.
+2. Write to the control register: 0b10.
 
 Input:
 

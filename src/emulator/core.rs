@@ -1,5 +1,5 @@
 use log::info;
-use std::{cell::UnsafeCell, sync::LazyLock, time::Duration};
+use std::{sync::LazyLock, time::Duration};
 use tokio::time::sleep;
 
 use crate::emulator::{
@@ -31,7 +31,6 @@ pub struct Core {
     pub etr: i32,
     pub frame_buffer_handle: Option<FramebufferHandle>,
     pub disk_handle: Option<DiskHandle>,
-    pub serial_buffer: String,
 }
 
 const GPR_COUNT: usize = 32;
@@ -54,7 +53,6 @@ impl Core {
             tid: id as i32,
             etr: 0,
             frame_buffer_handle: frame_buffer_handle,
-            serial_buffer: String::new(),
         }
     }
 

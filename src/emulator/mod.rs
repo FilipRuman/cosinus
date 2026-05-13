@@ -19,6 +19,7 @@ pub mod interrupts;
 pub mod io;
 pub(crate) mod memory;
 pub mod psr;
+pub mod serial;
 pub mod system_level;
 pub mod test;
 

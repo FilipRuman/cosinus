@@ -53,8 +53,34 @@ pub fn assemble_with_linker_data(
     base_address: u32,
     to_assemble: Vec<Command>,
 ) -> Result<Vec<i32>> {
+    //TODO: MAKE A SINGLE FUNCTION FOR THIS
     let named_immediate_eval = |name: &str, immediate_size: u8, pc: u32| -> Result<i32> {
-        if let Some(label_adress) = global_addresses_for_labels.get(name) {
+        if let Some(complex_immidiate) = name.strip_suffix(')') {
+            let mut to_evaluate = String::new();
+            for value in complex_immidiate.split(' ') {
+                if let Some(label_adress) = global_addresses_for_labels.get(value) {
+                    let offset = *label_adress as i64 - base_address as i64 - (pc * 4) as i64; // i64 to avoid
+                    to_evaluate += &offset.to_string();
+                    to_evaluate += " ";
+                } else {
+                    to_evaluate += value;
+                    to_evaluate += " ";
+                }
+            }
+            let offset = evalexpr::eval_int(&to_evaluate).with_context(|| {
+                format!("evaluation of an complex immediate did not succeedi, value:'{name}'")
+            })?;
+
+            if offset.abs() > 1 << immediate_size - 1
+            /* -1: signed integer*/
+            {
+                bail!(
+                    "Value of the immediate- {offset} calculated during linking of labels was higher than it is possible to store in immediate of size 2^{immediate_size}"
+                );
+            }
+
+            Ok(offset as i32)
+        } else if let Some(label_adress) = global_addresses_for_labels.get(name) {
             let offset = *label_adress as i64 - base_address as i64 - (pc * 4) as i64; // i64 to avoid
             // any overflows
             debug!(
@@ -116,8 +142,35 @@ where
 pub fn assemble_without_linker_data(to_assemble: Vec<Command>) -> Result<Vec<i32>> {
     let linking_data = get_data_for_linking(&to_assemble)?;
     let labels = linking_data.declared_labels;
+
+    //TODO: MAKE A SINGLE FUNCTION FOR THIS
     let named_immediate_eval = |name: &str, immediate_size: u8, pc: u32| -> Result<i32> {
-        if let Some(label_adress) = labels.get(name) {
+        if let Some(complex_immidiate) = name.strip_suffix(')') {
+            let mut to_evaluate = String::new();
+            for value in complex_immidiate.split(' ') {
+                if let Some(label_adress) = labels.get(value) {
+                    let offset = *label_adress as i64 - (pc * 4) as i64; // i64 to avoid
+                    to_evaluate += &offset.to_string();
+                    to_evaluate += " ";
+                } else {
+                    to_evaluate += value;
+                    to_evaluate += " ";
+                }
+            }
+            let offset = evalexpr::eval_int(&to_evaluate).with_context(|| {
+                format!("evaluation of an complex immediate did not succeedi, value:'{name}'")
+            })?;
+
+            if offset.abs() > 1 << immediate_size - 1
+            /* -1: signed integer*/
+            {
+                bail!(
+                    "Value of the immediate- {offset} calculated during linking of labels was higher than it is possible to store in immediate of size 2^{immediate_size}"
+                );
+            }
+
+            Ok(offset as i32)
+        } else if let Some(label_adress) = labels.get(name) {
             let offset = *label_adress as i64 - (pc * 4) as i64; // i64 to avoid
             // any overflows
             debug!(

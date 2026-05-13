@@ -8,17 +8,7 @@ mod test {
         emulator::core::Core,
     };
     use anyhow::Result;
-    use log::{error, info};
-
-    #[test]
-    fn test_constants() -> Result<()> {
-        crate::log::init_log();
-        error!(
-            "-->>test_constants: {}",
-            assembler::handle_evaluation_of_constant("a = \"Testcode\"; a",)?
-        );
-        Ok(())
-    }
+    use log::info;
 
     #[test]
     fn test_instruction_conversion_for_assembler() -> Result<()> {
