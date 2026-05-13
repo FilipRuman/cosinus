@@ -28,6 +28,13 @@ Resolution:
 - Branches use PC-relative offsets: offset = target - current_pc - 1
 - Jumps may use absolute or relative addressing depending on instruction
 
+### Complex Labels
+
+eg. add r30 r0 ((hello_world + 4 )* (4 * $"test_var - 5"))
+
+you can add complex expressions for the immidiates by wrapping value inside of a
+brackets and you can add any expression you want to evaluate.
+
 ---
 
 ## CONSTANTS
