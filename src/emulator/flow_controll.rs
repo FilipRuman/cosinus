@@ -3,17 +3,19 @@ use log::{debug, info};
 use crate::emulator::core::Core;
 
 impl Core {
-    pub fn jmp(&mut self, imm: i32) {
-        self.pc += imm;
+    pub fn jmp(&mut self, imm26: i32) {
+        let sign_extended = ((imm26 << 6) as i32) >> 6;
+        self.pc = self.pc.wrapping_add(sign_extended);
     }
-    pub fn call(&mut self, imm: i32) {
+    pub fn call(&mut self, imm26: i32) {
+        let sign_extended = ((imm26 << 6) as i32) >> 6;
         self.gpr[Core::RA] = self.pc; // byte space address -> 4 bytes
         info!(
-            "call, pc:'{}' imm:'{imm}', ra:'{}'",
+            "call, pc:'{}' imm:'{sign_extended:#b}', ra:'{}'",
             self.pc,
             self.gpr[Core::RA]
         );
-        self.pc = self.pc.wrapping_add(imm);
+        self.pc = self.pc.wrapping_add(sign_extended);
     }
 
     pub fn ret(&mut self) {

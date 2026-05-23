@@ -40,6 +40,8 @@ impl Memory {
     }
 
     #[inline]
+    /// WARN: CAN'T BE USED WITH VEC-s: will write value of the vec datastructure not it's contents.
+    /// For use vec versions of read && write functions.
     pub unsafe fn write_vec<T>(&self, addr: u32, value: Vec<T>) {
         let addr = addr as u32 as usize;
         if addr > MEMORY_SIZE {
@@ -111,26 +113,31 @@ impl Memory {
 impl Core {
     pub fn handle_memory_load(&mut self, addr: i32) -> Option<i32> {
         let addr = addr as u32;
-        if addr < 0xD0000000u32 {
-            unsafe { Some(MEMORY.read(addr)) }
-        } else {
-            if addr < 0xE0000000u32 {
-                //Framebuffer
-                error!("Framebuffer memory loading is not yet implemented");
-                None
-            } else if addr < 0xF0000000u32 {
-                error!("I/O memory loading is not yet implemented");
-                None
+        let value = {
+            if addr < 0xD0000000u32 {
+                unsafe { Some(MEMORY.read(addr)) }
             } else {
-                // Kernel
-                if self.read_psr_bit(PsrBitMask::KernelPrivelage) {
-                    unsafe { Some(MEMORY.read(addr)) }
-                } else {
-                    self.trigger_exception(ExceptionType::InsufficientPrivelages);
+                if addr < 0xE0000000u32 {
+                    //Framebuffer
+                    error!("Framebuffer memory loading is not yet implemented");
                     None
+                } else if addr < 0xF0000000u32 {
+                    error!("I/O memory loading is not yet implemented");
+                    None
+                } else {
+                    // Kernel
+                    if self.read_psr_bit(PsrBitMask::KernelPrivelage) {
+                        unsafe { Some(MEMORY.read(addr)) }
+                    } else {
+                        self.trigger_exception(ExceptionType::InsufficientPrivelages);
+                        None
+                    }
                 }
             }
-        }
+        };
+
+        debug!("handle_memory_load:{addr:#x} value:{value:?}");
+        value
     }
     pub fn handle_memory_store<F>(&mut self, addr: i32, value: i32, store_closure: F)
     where

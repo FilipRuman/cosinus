@@ -478,6 +478,16 @@ impl Into<Command> for Instruction {
         Command::Instr(self)
     }
 }
+fn to_i26(x: i32) -> Option<i32> {
+    const MIN: i32 = -(1 << 25);
+    const MAX: i32 = (1 << 25) - 1;
+
+    if (MIN..=MAX).contains(&x) {
+        Some(x)
+    } else {
+        None
+    }
+}
 impl Instruction {
     pub fn encode<F>(&self, named_immediate_eval: &F, pc: u32) -> Result<i32>
     where
@@ -494,7 +504,7 @@ impl Instruction {
                     const SIZE: u8 = 16;
                     let target = named_immediate_eval(name, SIZE, pc)?;
                     debug!(
-                        "Handle imm16 label: target:'{target}' pc:'{pc}' name:'{name}' out:'{}'",
+                        "Handle imm16 label: target:'{target}' pc:'{pc}' name:'{name}' out:'{:#b}'",
                         target as i16
                     );
                     Ok(target as i16)
@@ -507,9 +517,10 @@ impl Instruction {
                 Immediate::Direct(v) => Ok(*v),
                 Immediate::Label(name) => {
                     const SIZE: u8 = 26;
+
                     let target = named_immediate_eval(name, SIZE, pc)?;
                     debug!(
-                        "Handle imm26 label: target:'{target}' pc:'{pc}' name:'{name}' out:'{}'",
+                        "Handle imm26 label: target:'{target}' pc:'{pc}' name:'{name}' out:'{:#b}'",
                         target
                     );
                     Ok(target)

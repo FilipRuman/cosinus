@@ -1,19 +1,62 @@
+halt
+
+number_conversion_buffer:
+.datac '0123456789'
+
 $"hello_world = \"Hello world!\""
 $"error = \"error!\\n\""
 $"serial_addr = 0xE0300000"
 
-halt
-
 print_hw:
+add r11 r2 0 # save the return addr
+apc r5 (hello_world + 4) 
+add r6 r0 $"len(hello_world)"
+call print
+add r2 r11 0 # load the return addr
+ret
 
+# r5: bufferaddr 
+# r6: bytes count
+print:
 set32 r30 $"serial_addr"
-apc r31 (hello_world + 4) 
-store r30 r31 0x00
-add r31 r0 $"len(hello_world)"
-store r30 r31 0x04
+
+store r30 r5 0x00
+store r30 r6 0x04
+
 add r31 r0 1 # apply print
 store r30 r31 0x0C
 ret
+
+# 2^32 = 4294967296 so i only need 10 characters of buffer 
+# r4: number to print
+print_number:
+        add r11 r4 0 # save argument 
+        add r30 r0 0 # char index
+        number_stringification_loop_start:
+                rem r31 r4 10 # r31 digit 
+                add r31 r31 48 # r31 asci number
+
+                # char buffer addr
+                apc r29 (number_conversion_buffer + 4+9)
+                subr r29 r29 r30 
+                
+                # store char
+                storeb r29 r31 0
+
+                add r30 r30 1 # increase char index
+                div r4 r4 10
+
+                bne r4 0 number_stringification_loop_start
+
+
+        add r12 r2 0 # save the return addr
+        apc r5 (number_conversion_buffer + 4+10) # 10 instead of 9 to offset the number of bytes(r30) being too big by 1 
+        subr r5 r5 r30
+        add r6 r30 1  # bytes count 
+        call print
+        add r2 r12 0 # load the return addr
+        add r4 r11 0 # restore argument 
+        ret
 
 hello_world:
 .datac  $"hello_world"

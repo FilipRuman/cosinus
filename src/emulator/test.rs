@@ -79,6 +79,15 @@ halt
         Ok(())
     }
     fn memory() -> Result<()> {
+        {
+            let bytes = vec![25u8, 215u8, 31u8, 26u8, 210, 11u8, 74u8, 34u8, 071u8];
+            let addr = 0x2262;
+            unsafe {
+                MEMORY.write_vec(addr, bytes.clone()); // TEMP: for debbuggng,
+                // later remove this clone
+            }
+            assert_eq!(unsafe { MEMORY.read_vec::<u8>(addr, bytes.len()) }, bytes);
+        }
         let instructions = assembler::assemble_from_string(
             "
 add r5 r0 25

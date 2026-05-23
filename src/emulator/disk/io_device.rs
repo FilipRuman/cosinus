@@ -1,5 +1,5 @@
 use anyhow::{Result, anyhow, bail};
-use log::{error, info};
+use log::{debug, error, info};
 use tokio::sync::mpsc;
 
 use crate::emulator::{
@@ -52,11 +52,14 @@ pub async fn run_disk_loop(mut rx: mpsc::Receiver<DiskOp>) -> Result<()> {
 
     while let Some(op) = rx.recv().await {
         apply_op(&mut disk_registers, op);
-        info!("run_disk_loop -apply_op");
+        debug!(
+            "run_disk_loop -apply_op: op:'{op:?}', registers:'{:?}'",
+            disk_registers
+        );
         if disk_registers.last_interrupt_acknowledged
             && let Some(thread_interrupt_data) = disk_registers.threads_to_interrupt.pop()
         {
-            info!("run_disk_loop - interrupt");
+            debug!("run_disk_loop - interrupt");
             disk_registers.last_interrupt_acknowledged = false;
             unsafe {
                 DISK_STATUS_REGISTER = thread_interrupt_data.status_register_data;
@@ -68,10 +71,12 @@ pub async fn run_disk_loop(mut rx: mpsc::Receiver<DiskOp>) -> Result<()> {
     }
     Ok(())
 }
+#[derive(Debug)]
 struct CoreInterruptData {
     pub core_id: u32,
     pub status_register_data: u32,
 }
+#[derive(Debug)]
 struct DiskRegisters {
     last_interrupt_acknowledged: bool,
     threads_to_interrupt: Vec<CoreInterruptData>,
@@ -107,8 +112,12 @@ fn handle_control_register_write(disk_registers: &mut DiskRegisters, op: DiskOp)
                 block_count: disk_registers.block_count,
             })?;
 
+            debug!(
+                "handle_control_register_write- READ: bytes:{bytes:?}, buffer_address:{:#x}",
+                disk_registers.buffer_address
+            );
             unsafe {
-                MEMORY.write(disk_registers.buffer_address, bytes);
+                MEMORY.write_vec(disk_registers.buffer_address, bytes);
             }
 
             let command_id = op.value & !0b11 << 8;
@@ -120,12 +129,17 @@ fn handle_control_register_write(disk_registers: &mut DiskRegisters, op: DiskOp)
 
         0b10 => {
             // write
+            //
             let bytes: Vec<u8> = unsafe {
                 MEMORY.read_vec(
                     disk_registers.buffer_address,
                     (disk_registers.block_count * BLOCK_SIZE_BYTES) as usize,
                 )
             };
+            debug!(
+                "handle_control_register_write- WRITE: bytes:{bytes:?}, buffer_address:{:#x}",
+                disk_registers.buffer_address
+            );
             DISK.write_extent(
                 Extent {
                     base_block_index: disk_registers.base_block_index,
@@ -143,6 +157,10 @@ fn handle_control_register_write(disk_registers: &mut DiskRegisters, op: DiskOp)
         0b01 => {
             // acknowledge
             disk_registers.last_interrupt_acknowledged = true;
+            debug!(
+                "handle_control_register_write- last_interrupt_acknowledged:{}",
+                disk_registers.last_interrupt_acknowledged
+            );
         }
         other => bail!("Operation type is invalid:'{other}'"),
     };

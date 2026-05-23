@@ -55,7 +55,7 @@ impl Disk {
                         &value_to_move,
                     )?;
                     used_blocks_of_new_allocation += extent.block_count;
-                    self.mark_extend_as_free_data_blocks(extent)?;
+                    self.mark_extent_as_free_data_blocks(extent)?;
                     inode.extents[i] = Extent::zero();
                 }
                 inode.extents[0] = allocation;
@@ -67,7 +67,7 @@ impl Disk {
         }
         bail!("inode defragmentation did not succeed- couldn't defrag it");
     }
-    pub fn mark_extend_as_free_data_blocks(&self, extend: Extent) -> Result<()> {
+    pub fn mark_extent_as_free_data_blocks(&self, extend: Extent) -> Result<()> {
         let (group_info, group_index) = self
             .fs_info
             .get_group_info_for_block(extend.base_block_index);

@@ -24,9 +24,9 @@ async fn main() -> Result<()> {
     if let Some(arg) = args.next() {
         match arg.as_str() {
             "emulate_clean" => {
-                emulate().await?;
                 init_fs()?;
-                setup_code()?
+                setup_code()?;
+                emulate().await?;
             }
             "emulate" => emulate().await?,
             "init_fs" => init_fs()?,
@@ -55,14 +55,11 @@ fn init_fs() -> Result<()> {
 }
 
 fn setup_boot_code() -> Result<()> {
-    DISK.mark_extend_as_free_data_blocks(Extent {
-        base_block_index: DISK.superblock.boot_code_block_base_index,
-        block_count: DISK.superblock.boot_code_block_count,
-    })?;
     let boot_code_path = project_dir("code/boot");
     const IS_BOOT_CODE: bool = true;
     let boot_code = linker::generate_elf_for_dir(boot_code_path, IS_BOOT_CODE)
         .context("generating elf for boot code")?;
+
     let mut boot_code_bytes: Vec<u8> = bytemuck::cast_slice(&boot_code).to_vec();
     let boot_code_blocks = (boot_code_bytes.len()).div_ceil(disk::BLOCK_SIZE_BYTES as usize);
     boot_code_bytes.resize(boot_code_blocks * disk::BLOCK_SIZE_BYTES as usize, 0);
@@ -72,7 +69,13 @@ fn setup_boot_code() -> Result<()> {
     let mut superblock = DISK.superblock.clone();
     superblock.boot_code_block_base_index = alloc.base_block_index;
     superblock.boot_code_block_count = alloc.block_count;
-    let mut super_block_bytes = bytemuck::bytes_of(&superblock).to_vec();
+    let mut super_block_bytes = {
+        let mut bytes = vec![];
+        bytes.append(&mut 0x00325246_u32.to_le_bytes().to_vec());
+        bytes.append(&mut bytemuck::bytes_of(&superblock).to_vec());
+        bytes
+    };
+    info!("---->bytes of the superblock:{super_block_bytes:?}, boot code alloc:{alloc:?}");
     super_block_bytes.resize(disk::BLOCK_SIZE_BYTES as usize, 0);
     DISK.write_extent(Extent::single(0), &super_block_bytes)?;
 

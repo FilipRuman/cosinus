@@ -325,7 +325,7 @@ impl Disk {
         Ok(())
     }
 }
-pub fn init_file_system(metadata: SuperBlock) -> Result<()> {
+pub fn init_file_system(superblock: SuperBlock) -> Result<()> {
     let internal_file = &mut {
         let path = project_dir(INTERNAL_FILE_PATH);
         OpenOptions::new()
@@ -337,7 +337,7 @@ pub fn init_file_system(metadata: SuperBlock) -> Result<()> {
             .expect("internal file path for disk is invalid!")
     };
 
-    let fs_info = FsInfo::new(&metadata);
+    let fs_info = FsInfo::new(&superblock);
     // Allocate enough space
     {
         const BATCHES: usize = 100;
@@ -355,21 +355,14 @@ pub fn init_file_system(metadata: SuperBlock) -> Result<()> {
     internal_file.rewind()?;
     // Super Block
     internal_file.write_all(&(0x00325246_u32.to_le_bytes()))?; // magic
-    internal_file.write_all(&metadata.total_inodes.to_le_bytes())?;
-    internal_file.write_all(&metadata.data_blocks_per_group.to_le_bytes())?;
-    internal_file.write_all(&metadata.inodes_per_group.to_le_bytes())?;
-    internal_file.write_all(&metadata.group_count.to_le_bytes())?;
-    internal_file.write_all(&metadata.inode_size.to_le_bytes())?;
-    internal_file.write_all(&metadata.flags.to_le_bytes())?;
-    internal_file.write_all(&metadata.boot_code_block_base_index.to_le_bytes())?;
-    internal_file.write_all(&metadata.boot_code_block_count.to_le_bytes())?;
+    internal_file.write_all(bytemuck::bytes_of(&superblock))?;
 
     internal_file.seek(std::io::SeekFrom::Start(1 * BLOCK_SIZE_BYTES as u64))?;
     // Group Descriptor Table
-    for _ in 0..metadata.group_count {
+    for _ in 0..superblock.group_count {
         let value: GroupDescriptor = GroupDescriptor {
-            free_blocks_count: metadata.data_blocks_per_group,
-            free_inodes_count: metadata.inodes_per_group,
+            free_blocks_count: superblock.data_blocks_per_group,
+            free_inodes_count: superblock.inodes_per_group,
         };
         let bytes = &value.to_bytes_le();
         internal_file.write_all(bytes)?;

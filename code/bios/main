@@ -1,9 +1,14 @@
+$"serial_addr = 0xE0300000"
+$"wrong_magic_number_error = \"Magic number of the filesystem was invalid\""
 $"base_disk_addr = 0xE0000000"
 $"buffer_address = 0x6000"
 
 halt
 start:
 call print_hw
+
+set32 r4 2137420
+call print_number 
 
 apc r20 temp_interrupt_table 
 sysw r20 1 # set IVT adress 
@@ -16,56 +21,38 @@ store r20 r21 16 # *(IVT + 4 * 4) = temp_disk_interrupt
 or r30 r0 0b11 # Kernel privelages + interrupts enabled
 sysw r30 0 
 
+        or r4 r0 0 # base_block_index
+        or r5 r0 $"buffer_address"
+        or r6 r0 1 # block_count
+        or r7 r0 0 # core_id_to_interrupt
+        call bios_disk_read
 
-# Read First Block From Disk
-        set32 r12 $"base_disk_addr" # base disk addr
-        
-        or r31 r0 0 # base_block_index
-        store r12 r31 0 
-        
-        or r11 r0 $"buffer_address" # buffer_address(idk. some random addr, this doesn't matter)
-        store r12 r11 0x04 
+# Check if the magic num is right
+        or r11 r0 $"buffer_address" 
+        load r30 r11 0x00 # Magic Number 
+        set32 r31 0x00325246 
+        beq r30 r31 12   
+                add r4 r30 0
+                call print_number 
+                call wrong_magic_number_error_func
 
-        or r31 r0 1 # block_count
-        store r12 r31 0x08 
+# load Boot Code Blocks From Disk
+        or r5 r0 $"buffer_address"
+        load r4 r5 28  # base_block_index- Superblock::boot_code_block_base_index
+        load r6 r5 32  # block_count- Superblock::boot_code_block_count
 
-        or r31 r0 0 # core_id_to_interrupt 
-        store r12 r31 0x0C 
-
-        or r31 r0 0 # control: read, 0 command id
-        store r12 r31 0x14 
-        halt # await for disk interrupt
-
-# Enable back interrupts
-or r30 r0 0b11 # Kernel privelages + interrupts enabled
-sysw r30 0 
-
-# Acknowladge the Interrupt
-or r31 r0 0b01 # control: read, 1 command id
-store r12 r31 0x14 
+        or r7 r0 0 # core_id_to_interrupt
+        call bios_disk_read
 
 call print_hw   
 
-
-or r11 r0 $"buffer_address" # buffer_address(idk. some random addr, this doesn't matter)
-load r30 r11 0x00 # Magic Number 
-# TODO: change serial printing impl
-
-# TODO: check Magic Number
-# TODO: load Boot Code Blocks From Disk
-# TODO: jump To First Byte Of The Boot Code
-
-
-halt
-
+or r2 r0 $"buffer_address"
+ret # retrun jumps to the return register's value- r2 
 halt
 temp_disk_interrupt:
 sysr r2 3 # load EPC to normal return register
 add r2 r2 -4
 ret # Normal return to carry the privelages
-ret # Normal return to carry the privelages
-
-
 temp_interrupt_table: 
 # Alloc some space for the temporary interrupt table
 halt
@@ -80,3 +67,13 @@ halt
 halt
 halt
 halt
+
+wrong_magic_number_error_func:
+        apc r5 (wrong_magic_number_error + 4)
+        add r6 r0  $"len(wrong_magic_number_error)"
+        call print
+        halt
+wrong_magic_number_error:
+.datac  $"wrong_magic_number_error"
+
+

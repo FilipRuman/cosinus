@@ -1,0 +1,50 @@
+halt
+$"base_disk_addr = 0xE0000000"
+# r4 base_block_index
+# r5 buffer_address
+# r6 block_count
+# r7 core_id_to_interrupt
+read_disk_and_halt_untill_interrupt:
+        set32 r31 $"base_disk_addr" 
+        store r31 r4 0 # base_block_index 
+        store r31 r5 0x04 # buffer_address 
+
+        store r31 r6 0x08 # block_count 
+
+        store r31 r7 0x0C # core_id_to_interrupt 
+
+        or r30 r0 0 # control: read, 0 command id
+        store r31 r30 0x14 
+        halt # await for disk interrupt
+        ret
+
+$"base_disk_addr = 0xE0000000"
+# r4 base_block_index
+# r5 buffer_address
+# r6 block_count
+# r7 core_id_to_interrupt
+bios_disk_read:
+        set32 r31 $"base_disk_addr" 
+        store r31 r4 0 # base_block_index 
+        store r31 r5 0x04 # buffer_address 
+
+        store r31 r6 0x08 # block_count 
+
+        store r31 r7 0x0C # core_id_to_interrupt 
+
+        add r11 r2 0 # save the return addr - the temp interrupt function will modify it  
+        or r30 r0 0 # control: read, 0 command id
+        store r31 r30 0x14 
+        halt # await for disk interrupt
+        add r2 r11 0 # load the return addr - the temp interrupt function will modify it  
+
+        # Enable back interrupts
+        or r30 r0 0b11 # Kernel privelages + interrupts enabled
+        sysw r30 0 
+
+        set32 r31 $"base_disk_addr" 
+        # Acknowladge the Interrupt
+        or r30 r0 0b01 # control: read, 1 command id
+        store r31 r30 0x14 
+
+        ret

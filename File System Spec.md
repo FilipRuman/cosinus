@@ -53,7 +53,6 @@ Located at a fixed 0 block offset
 
 ```rust
 struct Superblock {
-
     magic:u32  = 0x00325246,  // Used to validate FR2 file system presence
     data_blocks_per_group:u32,
     inodes_per_group:u32,

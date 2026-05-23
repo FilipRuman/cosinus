@@ -10,7 +10,7 @@ pub mod instruction_parsing;
 pub mod parsing_test;
 mod test;
 use anyhow::{Context, Ok, Result, bail};
-use log::debug;
+use log::{debug, info};
 
 pub fn assemble_from_string(input: &str) -> Result<Vec<i32>> {
     let parsed = parse_program(input)?;
@@ -71,7 +71,7 @@ pub fn assemble_with_linker_data(
                 format!("evaluation of an complex immediate did not succeedi, value:'{name}'")
             })?;
 
-            if offset.abs() > 1 << immediate_size - 1
+            if offset.abs() > 1 << immediate_size
             /* -1: signed integer*/
             {
                 bail!(
@@ -86,14 +86,14 @@ pub fn assemble_with_linker_data(
             debug!(
                 "assemble_with_linker_data.label_handle: name:'{name}' base_address:'{base_address}' global:'{pc}' offset:'{offset}'"
             );
-            if offset.abs() > 1 << immediate_size - 1
+            if offset.abs() > 1 << immediate_size
             /* -1: signed integer*/
             {
                 bail!(
                     "Value of the immediate- {offset} calculated during linking of labels was higher than it is possible to store in immediate of size 2^{immediate_size}"
                 );
             }
-
+            info!("handle label: name'{name}', offset'{offset}'");
             Ok(offset as i32)
         } else {
             bail!("Name of immediate:'{name}' is invalid");
@@ -161,7 +161,7 @@ pub fn assemble_without_linker_data(to_assemble: Vec<Command>) -> Result<Vec<i32
                 format!("evaluation of an complex immediate did not succeedi, value:'{name}'")
             })?;
 
-            if offset.abs() > 1 << immediate_size - 1
+            if offset.abs() > 1 << immediate_size
             /* -1: signed integer*/
             {
                 bail!(
@@ -176,7 +176,7 @@ pub fn assemble_without_linker_data(to_assemble: Vec<Command>) -> Result<Vec<i32
             debug!(
                 "assemble_without_linker_data.label_handle: name:'{name}'  global:'{pc}' offset:'{offset}'"
             );
-            if offset.abs() > 1 << immediate_size - 1
+            if offset.abs() > 1 << immediate_size
             /* -1: signed integer*/
             {
                 bail!(
