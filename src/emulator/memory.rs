@@ -40,8 +40,8 @@ impl Memory {
     }
 
     #[inline]
-    /// WARN: CAN'T BE USED WITH VEC-s: will write value of the vec datastructure not it's contents.
-    /// For use vec versions of read && write functions.
+    /// WARN: Can't BE USED WITH VEC-s: will write value of the vec data structure not its contents.
+    /// For use Vec versions of read && write functions.
     pub unsafe fn write_vec<T>(&self, addr: u32, value: Vec<T>) {
         let addr = addr as u32 as usize;
         if addr > MEMORY_SIZE {
@@ -117,21 +117,20 @@ impl Core {
             if addr < 0xD0000000u32 {
                 unsafe { Some(MEMORY.read(addr)) }
             } else {
-                if addr < 0xE0000000u32 {
+                if !self.read_psr_bit(PsrBitMask::KernelPrivelage) {
+                    self.trigger_exception(ExceptionType::InsufficientPrivelages);
+                    None
+                } else if addr < 0xE0000000u32 {
                     //Framebuffer
                     error!("Framebuffer memory loading is not yet implemented");
                     None
                 } else if addr < 0xF0000000u32 {
+                    // IO
                     error!("I/O memory loading is not yet implemented");
                     None
                 } else {
                     // Kernel
-                    if self.read_psr_bit(PsrBitMask::KernelPrivelage) {
-                        unsafe { Some(MEMORY.read(addr)) }
-                    } else {
-                        self.trigger_exception(ExceptionType::InsufficientPrivelages);
-                        None
-                    }
+                    unsafe { Some(MEMORY.read(addr)) }
                 }
             }
         };
@@ -148,7 +147,9 @@ impl Core {
         if addr < 0xD0000000u32 {
             store_closure();
         } else {
-            if addr < 0xE0000000u32 {
+            if !self.read_psr_bit(PsrBitMask::KernelPrivelage) {
+                self.trigger_exception(ExceptionType::InsufficientPrivelages);
+            } else if addr < 0xE0000000u32 {
                 //Framebuffer
                 if let Some(handle) = &mut self.frame_buffer_handle {
                     if let Err(err) = handle.write(addr - 0xD0000000, value as u32) {

@@ -35,6 +35,7 @@ instruction execution time.
   |-| user code
     | user data
     | user stacks
+|Kernel Space -> Memory access throws an exception if the privelage flag in the psr register is false   
   | Framebuffer  (0xD0000000..0xE0000000) 
   | I/O          (0xE0000000..0xF0000000)
   |-| Disk                  (0xE0000000...)
@@ -43,7 +44,6 @@ instruction execution time.
     | Serial                (0xE0300000...)
     | Some other device     (0xE0400000...)
     | ...
-|Kernel Space -> Memory access throws an exception if the privelage flag in the psr register is false   
 |-|Kernel       (> 0xF0000000)   
   |-| kernel code
     | kernel data
